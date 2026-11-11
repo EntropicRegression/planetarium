@@ -14,6 +14,8 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "0.1"
+        // Real phones and the x86_64 emulator; dropping 32-bit keeps the native libraries small.
+        ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
     }
 
     buildTypes {
@@ -33,6 +35,10 @@ android {
     buildFeatures {
         compose = true
     }
+    androidResources {
+        // The model is copied out of the APK once; compressing it only slows the build and that copy.
+        noCompress += "onnx"
+    }
 }
 
 dependencies {
@@ -50,4 +56,9 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer:$media3")
     implementation("androidx.media3:media3-transformer:$media3")
     implementation("androidx.media3:media3-effect:$media3")
+
+    // Runs the depth estimation model for "photo to spatial wallpaper".
+    // Pinned on purpose: newer releases (seen in 1.31.1) bundle a telemetry client that adds the
+    // INTERNET permission and a start-up provider. Check the merged manifest before upgrading.
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.20.0")
 }

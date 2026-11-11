@@ -5,3 +5,4 @@ local.properties
 .idea/
 .kotlin/
 .claude/
+app/src/main/assets/models/*.onnx
