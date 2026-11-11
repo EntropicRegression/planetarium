@@ -39,6 +39,8 @@ class ShaderLayer(pack: WallpaperPack, spec: LayerSpec, host: LayerHost, maxText
     private val uOffset = program.uniform("uOffset")
     private val uTouch = program.uniform("uTouch")
     private val uPass = program.uniform("uPass")
+    private val uTilt = program.uniform("uTilt")
+    override val usesTilt: Boolean = uTilt >= 0
     private val paramUniforms = config.params.map { program.uniform(it.id) to it.value }.filter { it.first >= 0 }
 
     /** A shader that reads neither the clock nor its own previous frame is redrawn only on input. */
@@ -167,6 +169,7 @@ class ShaderLayer(pack: WallpaperPack, spec: LayerSpec, host: LayerHost, maxText
             }
         }
         if (uOffset >= 0) GLES30.glUniform1f(uOffset, frame.input.offsetX)
+        if (uTilt >= 0) GLES30.glUniform2f(uTilt, frame.input.tiltX, frame.input.tiltY)
         if (uTouch >= 0) {
             if (everPressed) {
                 GLES30.glUniform3f(uTouch, lastX / frame.width, 1f - lastY / frame.height, if (pressed) 1f else 0f)

@@ -133,6 +133,7 @@ private fun LibraryScreen() {
 
     val importVideo = rememberVideoImporter(store) { select(it.id) }
     val importShader = rememberShaderImporter(store) { select(it.id) }
+    val importLayered = rememberLayeredImporter(store) { select(it.id) }
     var menuOpen by remember { mutableStateOf(false) }
 
     Scaffold(
@@ -152,6 +153,10 @@ private fun LibraryScreen() {
                     DropdownMenuItem(text = { Text("影片") }, onClick = {
                         menuOpen = false
                         importVideo()
+                    })
+                    DropdownMenuItem(text = { Text("分層空間桌布") }, onClick = {
+                        menuOpen = false
+                        importLayered()
                     })
                     DropdownMenuItem(text = { Text("Shader / 插件包") }, onClick = {
                         menuOpen = false

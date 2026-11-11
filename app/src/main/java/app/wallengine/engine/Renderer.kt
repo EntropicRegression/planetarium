@@ -40,6 +40,13 @@ class Renderer(context: Context) : Choreographer.FrameCallback {
     val input = InputState()
     @Volatile var maxFps = 30
 
+    private val tilt = TiltSensor(context.applicationContext, handler, input) { invalidate() }
+
+    /** The motion sensor runs only while a visible scene actually uses it. Render thread. */
+    private fun updateTilt() {
+        if (visible && scene?.usesTilt == true) tilt.start() else tilt.stop()
+    }
+
     fun setPack(pack: WallpaperPack?) {
         handler.post {
             pendingPack = pack
@@ -78,6 +85,7 @@ class Renderer(context: Context) : Choreographer.FrameCallback {
         handler.post {
             visible = v
             scene?.onVisibilityChanged(v)
+            updateTilt()
             if (v) invalidate()
         }
     }
@@ -102,6 +110,7 @@ class Renderer(context: Context) : Choreographer.FrameCallback {
     fun release() {
         runBlocking {
             Choreographer.getInstance().removeFrameCallback(this)
+            tilt.stop()
             // GL objects die with the context, but layers may hold players and other non-GL resources.
             scene?.release()
             scene = null
@@ -146,6 +155,7 @@ class Renderer(context: Context) : Choreographer.FrameCallback {
                 null
             }
             scene?.onVisibilityChanged(visible)
+            updateTilt()
         }
         GLES30.glViewport(0, 0, width, height)
         GLES30.glClearColor(0.04f, 0.04f, 0.06f, 1f)

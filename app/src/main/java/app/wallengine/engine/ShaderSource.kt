@@ -36,6 +36,7 @@ void main() {
         Triple("vec3", "iChannelResolution", "[4]"),
         Triple("float", "uOffset", ""),
         Triple("vec3", "uTouch", ""),
+        Triple("vec2", "uTilt", ""),
         Triple("int", "uPass", ""),
     )
 

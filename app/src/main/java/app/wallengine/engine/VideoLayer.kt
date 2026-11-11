@@ -32,6 +32,10 @@ import app.wallengine.pack.WallpaperPack
 class VideoLayer(pack: WallpaperPack, spec: LayerSpec, private val host: LayerHost) : Layer {
     override val animated = false
 
+    private val parallax = Parallax.of(pack)
+    private val depth = spec.depth
+    override val usesTilt: Boolean = parallax.strength > 0f && parallax.factor(depth) != 0f
+
     private val program = ShaderProgram(VERT, FRAG)
     private val uScale = program.uniform("uScale")
     private val uOffset = program.uniform("uOffset")
@@ -132,19 +136,17 @@ class VideoLayer(pack: WallpaperPack, spec: LayerSpec, private val host: LayerHo
         }
         surfaceTexture.getTransformMatrix(texMatrix)
 
-        val viewAspect = frame.width.toFloat() / frame.height
-        val aspect = if (videoAspect > 0f) videoAspect else viewAspect
-        // Same cover fit and page-scroll pan as ImageLayer.
-        val scaleX = if (aspect > viewAspect) viewAspect / aspect else 1f
-        val scaleY = if (aspect > viewAspect) 1f else aspect / viewAspect
-        val offsetX = (frame.input.offsetX - 0.5f) * (1f - scaleX)
+        val aspect = if (videoAspect > 0f) videoAspect else frame.width.toFloat() / frame.height
+        // Same cover fit, page-scroll pan and tilt parallax as ImageLayer.
+        val fit = coverFit(aspect, frame, parallax.margin(depth), parallax.strength * parallax.factor(depth))
 
         program.use()
         GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
         GLES30.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, textureId)
         GLES30.glUniform1i(uTex, 0)
-        GLES30.glUniform2f(uScale, scaleX, scaleY)
-        GLES30.glUniform2f(uOffset, offsetX, 0f)
+        GLES30.glUniform2f(uScale, fit.scaleX, fit.scaleY)
+        // This shader's V runs upwards (the SurfaceTexture matrix flips it), CoverFit's downwards.
+        GLES30.glUniform2f(uOffset, fit.offsetX, -fit.offsetY)
         GLES30.glUniformMatrix4fv(uTexMatrix, 1, false, texMatrix, 0)
         frame.quad.draw()
         GLES30.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, 0)

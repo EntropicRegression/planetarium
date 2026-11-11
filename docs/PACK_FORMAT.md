@@ -34,6 +34,7 @@ my-pack/
 | `name`   | string | Shown in the library. Defaults to the directory name. |
 | `layers` | array  | The layers of the scene, see below. |
 | `params` | array  | Optional user parameters for shader layers, see [Parameters](#parameters). |
+| `parallax` | object | Optional tilt parallax settings, see [Parallax](#parallax). |
 
 Every layer has:
 
@@ -46,12 +47,35 @@ Every layer has:
 Layers are composited with premultiplied alpha. A layer that fails to load is skipped; the rest
 of the pack still shows.
 
+## Parallax
+
+Tilting the phone slides image and video layers according to their `depth`, which is what makes
+a layered pack look spatial.
+
+```json
+"parallax": { "strength": 0.04, "focus": 1.0 }
+```
+
+| Key        | Type  | Meaning |
+|------------|-------|---------|
+| `strength` | float | Slide at full tilt (about 17 degrees) per unit of depth difference, as a fraction of the screen. `0`..`0.2`, default `0.04`. `0` turns parallax off. |
+| `focus`    | float | The depth that stays still. Default `1.0`: the far background is fixed and nearer layers move. With `0.5`, far and near layers move in opposite directions. |
+
+A layer at depth `d` slides by `tilt * strength * (focus - d)`. Each layer is zoomed in just
+enough that its largest slide never shows an edge, so foreground layers should be transparent
+PNG/WebP with some empty space around the subject. Whatever pose the phone is held in becomes
+the neutral one after a few seconds. The motion sensor runs only while a visible pack uses it.
+
 ## Layer types
 
 ### `image`
 
 A still image (anything Android decodes: JPEG, PNG, WebP, ...), scaled to cover the screen. The
-part that does not fit horizontally is used to pan with the launcher's page scroll. No options.
+part that does not fit horizontally is used to pan with the launcher's page scroll.
+
+| Option     | Type   | Meaning |
+|------------|--------|---------|
+| `depthMap` | string | Path of a greyscale image of the same framing: white = near, black = far. The image is then displaced per pixel by its depth instead of sliding as a whole, giving a single photo continuous parallax. The layer's own `depth` is ignored. |
 
 ### `video`
 
@@ -112,6 +136,7 @@ pixel, and multiply the colour by alpha yourself for translucent ones.
 | `iChannelResolution[4]` | `vec3` | Pixel size of each channel (z is 1); zero for an unused channel. |
 | `uOffset` | `float` | Launcher page scroll, 0..1 (0.5 = centred). |
 | `uTouch` | `vec3` | xy = last touch position normalised to 0..1, origin bottom-left; z = 1 while touching, else 0. |
+| `uTilt` | `vec2` | Device tilt away from its resting pose, each axis -1..1. x > 0: right edge turned away from the viewer; y > 0: top edge turned towards them. Shader layers get no automatic parallax; use this to do your own. |
 | `uPass` | `int` | Feedback layers only, see below. 0 otherwise. |
 | *param id* | `float` | One per entry of the manifest's `params`. |
 
