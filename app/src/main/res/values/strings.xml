@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">WallEngine</string>
+    <string name="wallpaper_description">影片、空間與 Shader 動態桌布</string>
+</resources>
