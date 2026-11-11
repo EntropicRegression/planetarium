@@ -38,22 +38,37 @@ class PackStore(context: Context) {
         }
     }
 
-    /** Copies a picked image into a new single-layer pack. */
-    fun importImage(uri: Uri, name: String): WallpaperPack {
-        val id = UUID.randomUUID().toString()
-        val dir = File(packsDir, id).apply { mkdirs() }
+    /**
+     * Creates a new pack. [build] puts the asset files into the fresh pack directory and returns
+     * the layers; the manifest is written for it. The directory is removed if anything throws.
+     */
+    fun createPack(name: String, extras: JSONObject? = null, build: (dir: File) -> List<LayerSpec>): WallpaperPack =
+        createPackRaw { dir -> WallpaperPack.writeManifest(dir, name, build(dir), extras) }
+
+    /** Like [createPack], but [populate] must itself leave a valid manifest.json in the directory. */
+    fun createPackRaw(populate: (dir: File) -> Unit): WallpaperPack {
+        val dir = File(packsDir, UUID.randomUUID().toString()).apply { mkdirs() }
         try {
-            val src = "layer0"
-            appContext.contentResolver.openInputStream(uri).use { input ->
-                requireNotNull(input) { "cannot open $uri" }
-                File(dir, src).outputStream().use { input.copyTo(it) }
-            }
-            WallpaperPack.writeManifest(dir, name, listOf(LayerSpec(WallpaperPack.TYPE_IMAGE, src, 1f)))
+            populate(dir)
             return WallpaperPack.read(dir)
         } catch (e: Exception) {
             dir.deleteRecursively()
             throw e
         }
+    }
+
+    /** Copies a content Uri into [dest]. */
+    fun copyUri(uri: Uri, dest: File) {
+        appContext.contentResolver.openInputStream(uri).use { input ->
+            requireNotNull(input) { "cannot open $uri" }
+            dest.outputStream().use { input.copyTo(it) }
+        }
+    }
+
+    /** Copies a picked image into a new single-layer pack. */
+    fun importImage(uri: Uri, name: String): WallpaperPack = createPack(name) { dir ->
+        copyUri(uri, File(dir, "layer0"))
+        listOf(LayerSpec(WallpaperPack.TYPE_IMAGE, "layer0"))
     }
 
     fun delete(id: String) {
@@ -88,11 +103,15 @@ class PackStore(context: Context) {
         appContext.sendBroadcast(Intent(ACTION_RELOAD).setPackage(appContext.packageName))
     }
 
-    /** Small preview of the first image layer, for the library grid. */
+    /** Small preview for the library grid: the pack's thumb.jpg if present, else its first image layer. */
     fun thumbnail(pack: WallpaperPack, maxSize: Int = 512): Bitmap? {
-        val layer = pack.layers.firstOrNull { it.type == WallpaperPack.TYPE_IMAGE } ?: return null
+        val thumb = File(pack.dir, WallpaperPack.THUMBNAIL)
+        val file = if (thumb.isFile) thumb else {
+            val layer = pack.layers.firstOrNull { it.type == WallpaperPack.TYPE_IMAGE } ?: return null
+            pack.asset(layer.src)
+        }
         return try {
-            BitmapLoader.load(pack.asset(layer.src), maxSize)
+            BitmapLoader.load(file, maxSize)
         } catch (e: Exception) {
             Log.w(TAG, "thumbnail failed for ${pack.id}", e)
             null

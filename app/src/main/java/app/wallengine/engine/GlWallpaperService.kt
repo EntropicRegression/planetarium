@@ -7,6 +7,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.os.Build
 import android.service.wallpaper.WallpaperService
+import android.view.MotionEvent
 import android.view.SurfaceHolder
 import androidx.core.content.ContextCompat
 import app.wallengine.pack.PackStore
@@ -16,7 +17,7 @@ class GlWallpaperService : WallpaperService() {
     override fun onCreateEngine(): Engine = GlEngine()
 
     inner class GlEngine : Engine() {
-        private val renderer = Renderer()
+        private val renderer = Renderer(this@GlWallpaperService)
         private val store by lazy { PackStore(this@GlWallpaperService) }
 
         private val reloadReceiver = object : BroadcastReceiver() {
@@ -25,6 +26,7 @@ class GlWallpaperService : WallpaperService() {
 
         override fun onCreate(surfaceHolder: SurfaceHolder) {
             super.onCreate(surfaceHolder)
+            setTouchEventsEnabled(true)
             ContextCompat.registerReceiver(
                 this@GlWallpaperService, reloadReceiver, IntentFilter(PackStore.ACTION_RELOAD),
                 ContextCompat.RECEIVER_NOT_EXPORTED,
@@ -62,6 +64,12 @@ class GlWallpaperService : WallpaperService() {
             xPixelOffset: Int, yPixelOffset: Int,
         ) {
             renderer.setOffset(xOffset)
+        }
+
+        // The wallpaper only gets a copy of touches; it cannot consume them.
+        override fun onTouchEvent(event: MotionEvent) {
+            val down = event.actionMasked != MotionEvent.ACTION_UP && event.actionMasked != MotionEvent.ACTION_CANCEL
+            renderer.setTouch(event.x, event.y, down)
         }
 
         // API 34+: this engine was reassigned between home screen and lock screen.

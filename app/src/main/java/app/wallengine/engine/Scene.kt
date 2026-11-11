@@ -1,11 +1,10 @@
 package app.wallengine.engine
 
+import android.content.Context
 import android.opengl.GLES30
+import android.os.Handler
 import android.util.Log
-import app.wallengine.engine.gl.BitmapLoader
 import app.wallengine.engine.gl.FullscreenQuad
-import app.wallengine.engine.gl.ShaderProgram
-import app.wallengine.engine.gl.Texture2D
 import app.wallengine.pack.LayerSpec
 import app.wallengine.pack.WallpaperPack
 
@@ -13,24 +12,46 @@ import app.wallengine.pack.WallpaperPack
 class InputState {
     /** Launcher page scroll, 0..1 (0.5 = centred). */
     @Volatile var offsetX: Float = 0.5f
+
+    /** Last touch position in surface pixels, origin top-left. Keeps its value after the finger lifts. */
+    @Volatile var touchX: Float = 0f
+    @Volatile var touchY: Float = 0f
+    @Volatile var touchDown: Boolean = false
 }
 
 class FrameContext(
     val width: Int,
     val height: Int,
+    /** Seconds since the renderer started; keeps counting while the wallpaper is hidden. */
     val timeSec: Float,
     val input: InputState,
     val quad: FullscreenQuad,
 )
 
+/** What a layer can reach outside itself. */
+class LayerHost(
+    val context: Context,
+    /** Handler of the render thread (it has a Looper, so players/listeners can be bound to it). */
+    val handler: Handler,
+    /** Asks for one more frame; needed only by layers that are not [Layer.animated]. Any thread. */
+    val requestRender: () -> Unit,
+)
+
+/**
+ * One drawable layer. Created, drawn and released on the render thread with the GL context
+ * current (except [release], which may also run after the surface is gone: GL deletes are then
+ * no-ops, but non-GL resources such as players must still be freed).
+ */
 interface Layer {
     /** True if the layer changes over time and needs continuous rendering. */
     val animated: Boolean
     fun draw(frame: FrameContext)
+    /** Wallpaper shown/hidden. Pause decoders, sensors etc. while hidden. Called once after load too. */
+    fun onVisibilityChanged(visible: Boolean) {}
     fun release()
 }
 
-/** A loaded pack: its layers, drawn back to front. All methods must run on the GL thread. */
+/** A loaded pack: its layers, drawn back to front. All methods must run on the render thread. */
 class Scene private constructor(private val layers: List<Layer>) {
     private val quad = FullscreenQuad()
 
@@ -38,24 +59,37 @@ class Scene private constructor(private val layers: List<Layer>) {
 
     fun draw(width: Int, height: Int, timeSec: Float, input: InputState) {
         val frame = FrameContext(width, height, timeSec, input, quad)
-        GLES30.glEnable(GLES30.GL_BLEND)
-        GLES30.glBlendFunc(GLES30.GL_ONE, GLES30.GL_ONE_MINUS_SRC_ALPHA)
-        layers.forEach { it.draw(frame) }
+        layers.forEach {
+            // Layers may leave GL state changed; reset what the next one relies on.
+            GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
+            GLES30.glViewport(0, 0, width, height)
+            GLES30.glEnable(GLES30.GL_BLEND)
+            GLES30.glBlendFunc(GLES30.GL_ONE, GLES30.GL_ONE_MINUS_SRC_ALPHA)
+            it.draw(frame)
+        }
     }
 
+    fun onVisibilityChanged(visible: Boolean) = layers.forEach { it.onVisibilityChanged(visible) }
+
     fun release() {
-        layers.forEach { it.release() }
+        layers.forEach {
+            try {
+                it.release()
+            } catch (e: Exception) {
+                Log.w(TAG, "layer release failed", e)
+            }
+        }
         quad.release()
     }
 
     companion object {
         private const val TAG = "Scene"
 
-        fun load(pack: WallpaperPack, maxTextureSize: Int): Scene {
+        fun load(pack: WallpaperPack, host: LayerHost, maxTextureSize: Int): Scene {
             // Far layers first. A layer that fails to load is skipped rather than failing the whole pack.
             val layers = pack.layers.sortedByDescending { it.depth }.mapNotNull { spec ->
                 try {
-                    create(pack, spec, maxTextureSize)
+                    create(pack, spec, host, maxTextureSize)
                 } catch (e: Exception) {
                     Log.e(TAG, "layer ${spec.src} of pack ${pack.id} failed", e)
                     null
@@ -64,71 +98,12 @@ class Scene private constructor(private val layers: List<Layer>) {
             return Scene(layers)
         }
 
-        private fun create(pack: WallpaperPack, spec: LayerSpec, maxTextureSize: Int): Layer = when (spec.type) {
-            WallpaperPack.TYPE_IMAGE -> ImageLayer(pack, spec, maxTextureSize)
-            else -> throw IllegalArgumentException("unknown layer type ${spec.type}")
-        }
-    }
-}
-
-/** A still image, scaled to cover the screen, panning horizontally with the launcher page scroll. */
-class ImageLayer(pack: WallpaperPack, spec: LayerSpec, maxTextureSize: Int) : Layer {
-    override val animated = false
-
-    private val texture: Texture2D
-    private val program = ShaderProgram(VERT, FRAG)
-    private val uScale = program.uniform("uScale")
-    private val uOffset = program.uniform("uOffset")
-    private val uTex = program.uniform("uTex")
-
-    init {
-        val bitmap = BitmapLoader.load(pack.asset(spec.src), maxTextureSize)
-        texture = Texture2D(bitmap)
-        bitmap.recycle()
-    }
-
-    override fun draw(frame: FrameContext) {
-        val imageAspect = texture.width.toFloat() / texture.height
-        val viewAspect = frame.width.toFloat() / frame.height
-        // Fraction of the image visible on each axis (cover fit: one axis is 1, the other < 1).
-        val scaleX = if (imageAspect > viewAspect) viewAspect / imageAspect else 1f
-        val scaleY = if (imageAspect > viewAspect) 1f else imageAspect / viewAspect
-        // Spend the hidden horizontal part on page scrolling.
-        val offsetX = (frame.input.offsetX - 0.5f) * (1f - scaleX)
-
-        program.use()
-        texture.bind(0)
-        GLES30.glUniform1i(uTex, 0)
-        GLES30.glUniform2f(uScale, scaleX, scaleY)
-        GLES30.glUniform2f(uOffset, offsetX, 0f)
-        frame.quad.draw()
-    }
-
-    override fun release() {
-        texture.release()
-        program.release()
-    }
-
-    private companion object {
-        const val VERT = """#version 300 es
-layout(location = 0) in vec2 aPos;
-uniform vec2 uScale;
-uniform vec2 uOffset;
-out vec2 vUv;
-void main() {
-    vec2 uv = vec2(aPos.x * 0.5 + 0.5, 0.5 - aPos.y * 0.5);
-    vUv = (uv - 0.5) * uScale + 0.5 + uOffset;
-    gl_Position = vec4(aPos, 0.0, 1.0);
-}
-"""
-        const val FRAG = """#version 300 es
-precision mediump float;
-uniform sampler2D uTex;
-in vec2 vUv;
-out vec4 fragColor;
-void main() {
-    fragColor = texture(uTex, vUv);
-}
-"""
+        private fun create(pack: WallpaperPack, spec: LayerSpec, host: LayerHost, maxTextureSize: Int): Layer =
+            when (spec.type) {
+                WallpaperPack.TYPE_IMAGE -> ImageLayer(pack, spec, maxTextureSize)
+                WallpaperPack.TYPE_VIDEO -> VideoLayer(pack, spec, host)
+                WallpaperPack.TYPE_SHADER -> ShaderLayer(pack, spec, host, maxTextureSize)
+                else -> throw IllegalArgumentException("unknown layer type ${spec.type}")
+            }
     }
 }

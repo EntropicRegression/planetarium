@@ -1,5 +1,6 @@
 package app.wallengine.engine
 
+import android.content.Context
 import android.opengl.GLES30
 import android.os.Handler
 import android.os.HandlerThread
@@ -17,9 +18,10 @@ import java.util.concurrent.CountDownLatch
  * Rendering is on demand: a frame is drawn only when something changed, or continuously (capped
  * at [maxFps]) while the scene is animated and visible.
  */
-class Renderer : Choreographer.FrameCallback {
+class Renderer(context: Context) : Choreographer.FrameCallback {
     private val thread = HandlerThread("wallpaper-render").also { it.start() }
     private val handler = Handler(thread.looper)
+    private val host = LayerHost(context.applicationContext, handler) { requestRender() }
     private val egl = EglCore()
     private var eglReady = false
 
@@ -75,19 +77,33 @@ class Renderer : Choreographer.FrameCallback {
     fun setVisible(v: Boolean) {
         handler.post {
             visible = v
+            scene?.onVisibilityChanged(v)
             if (v) invalidate()
         }
     }
 
     fun setOffset(x: Float) {
         input.offsetX = x
+        requestRender()
+    }
+
+    fun setTouch(x: Float, y: Float, down: Boolean) {
+        input.touchX = x
+        input.touchY = y
+        input.touchDown = down
+        requestRender()
+    }
+
+    /** Asks for a frame; safe from any thread. */
+    fun requestRender() {
         handler.post { invalidate() }
     }
 
     fun release() {
         runBlocking {
             Choreographer.getInstance().removeFrameCallback(this)
-            // Scene GL objects die with the context.
+            // GL objects die with the context, but layers may hold players and other non-GL resources.
+            scene?.release()
             scene = null
             egl.release()
         }
@@ -124,11 +140,12 @@ class Renderer : Choreographer.FrameCallback {
             packChanged = false
             scene?.release()
             scene = try {
-                pendingPack?.let { Scene.load(it, maxTextureSize()) }
+                pendingPack?.let { Scene.load(it, host, maxTextureSize()) }
             } catch (e: Exception) {
                 Log.e(TAG, "pack load failed", e)
                 null
             }
+            scene?.onVisibilityChanged(visible)
         }
         GLES30.glViewport(0, 0, width, height)
         GLES30.glClearColor(0.04f, 0.04f, 0.06f, 1f)

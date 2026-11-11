@@ -35,6 +35,8 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
@@ -129,16 +131,34 @@ private fun LibraryScreen() {
         }
     }
 
+    val importVideo = rememberVideoImporter(store) { select(it.id) }
+    val importShader = rememberShaderImporter(store) { select(it.id) }
+    var menuOpen by remember { mutableStateOf(false) }
+
     Scaffold(
         topBar = { TopAppBar(title = { Text("桌布庫") }) },
         floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = {
-                    picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-                },
-                icon = { Icon(Icons.Filled.Add, contentDescription = null) },
-                text = { Text("匯入圖片") },
-            )
+            Box {
+                ExtendedFloatingActionButton(
+                    onClick = { menuOpen = true },
+                    icon = { Icon(Icons.Filled.Add, contentDescription = null) },
+                    text = { Text("匯入") },
+                )
+                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                    DropdownMenuItem(text = { Text("圖片") }, onClick = {
+                        menuOpen = false
+                        picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                    })
+                    DropdownMenuItem(text = { Text("影片") }, onClick = {
+                        menuOpen = false
+                        importVideo()
+                    })
+                    DropdownMenuItem(text = { Text("Shader / 插件包") }, onClick = {
+                        menuOpen = false
+                        importShader()
+                    })
+                }
+            }
         },
         bottomBar = {
             Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(16.dp)) {
@@ -159,7 +179,7 @@ private fun LibraryScreen() {
     ) { padding ->
         if (packs.isEmpty()) {
             Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                Text("還沒有桌布,先匯入一張圖片")
+                Text("還沒有桌布,先按「匯入」加入一個")
             }
         } else {
             LazyVerticalGrid(
