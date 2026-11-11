@@ -6,3 +6,4 @@ local.properties
 .kotlin/
 .claude/
 app/src/main/assets/models/*.onnx
+spatial-editor/

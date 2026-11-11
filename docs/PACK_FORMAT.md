@@ -35,6 +35,7 @@ my-pack/
 | `layers` | array  | The layers of the scene, see below. |
 | `params` | array  | Optional user parameters for shader layers, see [Parameters](#parameters). |
 | `parallax` | object | Optional tilt parallax settings, see [Parallax](#parallax). |
+| `canvas` | object | Optional `{ "width": 1080, "height": 2400 }`: the shape the pack was laid out on. Needed to place video layers (see [`video`](#video)); image layers made for that canvas should simply have its aspect ratio. |
 
 Every layer has:
 
@@ -79,11 +80,24 @@ part that does not fit horizontally is used to pan with the launcher's page scro
 
 ### `video`
 
-A video file.
+A video file, played muted. It redraws at most 30 times a second and pauses while the
+wallpaper is hidden or battery saver is on. Video has no transparency; use `blend` to overlay
+footage shot on black.
 
-| Option | Type | Meaning |
-|--------|------|---------|
-| `loop` | bool | Whether playback loops. |
+| Option     | Type   | Meaning |
+|------------|--------|---------|
+| `loop`     | bool   | Whether playback loops. Default `true`. |
+| `x`, `y`   | float  | Offset of the video's centre from the canvas centre, as fractions of the canvas width and height (y downwards). Default `0`. |
+| `scale`    | float  | Size relative to the smallest size that covers the canvas. Default `1`. |
+| `rotation` | float  | Clockwise rotation in degrees. Default `0`. |
+| `opacity`  | float  | `0`..`1`. Default `1`. |
+| `blend`    | string | `"normal"` (default), `"add"` or `"screen"`. The last two make black transparent, for sparks, glows, light leaks and similar overlay footage. |
+
+Without a `canvas` in the manifest the video itself is the canvas: it covers the screen and pans
+with the launcher's page scroll, and the placement options are of little use. With a `canvas`,
+the video is placed on it by the options above, and the canvas is what covers the screen.
+The file is played as it is: an imported pack is not transcoded, so keep videos near screen
+resolution.
 
 ### `shader`
 
