@@ -32,17 +32,13 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -73,6 +69,7 @@ import app.wallengine.pack.WallpaperPack
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -102,6 +99,7 @@ private fun LibraryScreen() {
     var serviceActive by remember { mutableStateOf(false) }
     /** The pack whose "apply to" dialog is open. */
     var choosingFor by remember { mutableStateOf<WallpaperPack?>(null) }
+    var openEditor by remember { mutableStateOf(false) }
 
     suspend fun refresh() {
         val (list, active) = withContext(Dispatchers.IO) {
@@ -127,29 +125,18 @@ private fun LibraryScreen() {
         }
     }
 
-    choosingFor?.let { pack ->
-        AlertDialog(
-            onDismissRequest = { choosingFor = null },
-            title = { Text("套用「${pack.name}」到") },
-            text = {
-                Column {
-                    listOf(
-                        "主畫面與鎖定畫面" to arrayOf(PackStore.Target.HOME, PackStore.Target.LOCK),
-                        "只有主畫面" to arrayOf(PackStore.Target.HOME),
-                        "只有鎖定畫面" to arrayOf(PackStore.Target.LOCK),
-                    ).forEach { (label, targets) ->
-                        TextButton(
-                            onClick = {
-                                choosingFor = null
-                                select(pack.id, *targets)
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                        ) { Text(label, Modifier.fillMaxWidth()) }
-                    }
-                }
-            },
-            confirmButton = { TextButton(onClick = { choosingFor = null }) { Text("取消") } },
-        )
+    fun newShader() {
+        scope.launch {
+            try {
+                val name = "Shader " + SimpleDateFormat("MM-dd HH:mm", Locale.getDefault()).format(Date())
+                val pack = withContext(Dispatchers.IO) { createBlankShaderPack(context.applicationContext, store, name) }
+                refresh()
+                openEditor = true
+                choosingFor = pack
+            } catch (e: Exception) {
+                Toast.makeText(context, "建立失敗:${e.message}", Toast.LENGTH_LONG).show()
+            }
+        }
     }
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
@@ -201,6 +188,10 @@ private fun LibraryScreen() {
                         menuOpen = false
                         importShader()
                     })
+                    DropdownMenuItem(text = { Text("新建 Shader") }, onClick = {
+                        menuOpen = false
+                        newShader()
+                    })
                 }
             }
         },
@@ -244,16 +235,25 @@ private fun LibraryScreen() {
                             else -> null
                         },
                         onSelect = { choosingFor = pack },
-                        onDelete = {
-                            scope.launch {
-                                withContext(Dispatchers.IO) { store.delete(pack.id) }
-                                refresh()
-                            }
-                        },
                     )
                 }
             }
         }
+    }
+
+    // After the Scaffold so that the full-screen shader editor is drawn on top of it.
+    choosingFor?.let { pack ->
+        PackActionsDialog(
+            pack = pack,
+            store = store,
+            startInEditor = openEditor,
+            onApply = { targets -> select(pack.id, *targets) },
+            onChanged = { scope.launch { refresh() } },
+            onDismiss = {
+                choosingFor = null
+                openEditor = false
+            },
+        )
     }
 }
 
@@ -263,9 +263,10 @@ private fun PackCard(
     store: PackStore,
     badge: String?,
     onSelect: () -> Unit,
-    onDelete: () -> Unit,
 ) {
-    val thumbnail by produceState<ImageBitmap?>(null, pack.id) {
+    // Re-read the preview when it was regenerated (after editing the pack's shader).
+    val stamp = remember(pack) { File(pack.dir, WallpaperPack.THUMBNAIL).lastModified() }
+    val thumbnail by produceState<ImageBitmap?>(null, pack.id, stamp) {
         value = withContext(Dispatchers.IO) { store.thumbnail(pack)?.asImageBitmap() }
     }
     Card(
@@ -279,7 +280,7 @@ private fun PackCard(
                 Image(it, contentDescription = pack.name, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
             }
         }
-        Row(Modifier.padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(
                     pack.name,
@@ -295,9 +296,6 @@ private fun PackCard(
                         style = MaterialTheme.typography.labelSmall,
                     )
                 }
-            }
-            IconButton(onClick = onDelete) {
-                Icon(Icons.Filled.Delete, contentDescription = "刪除 ${pack.name}")
             }
         }
     }

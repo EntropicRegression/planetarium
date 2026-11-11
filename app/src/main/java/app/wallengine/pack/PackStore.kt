@@ -9,6 +9,8 @@ import app.wallengine.engine.gl.BitmapLoader
 import org.json.JSONObject
 import java.io.File
 import java.util.UUID
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 
 /**
  * Pack library on disk. Lives in device-protected storage so the wallpaper process can read it
@@ -71,6 +73,50 @@ class PackStore(context: Context) {
         listOf(LayerSpec(WallpaperPack.TYPE_IMAGE, "layer0"))
     }
 
+    /** Tells the wallpaper process to re-read the selection and reload its packs from disk. */
+    fun notifyChanged() {
+        appContext.sendBroadcast(Intent(ACTION_RELOAD).setPackage(appContext.packageName))
+    }
+
+    fun rename(pack: WallpaperPack, name: String) {
+        val json = JSONObject(pack.manifest.toString()).put("name", name)
+        replaceFile(File(pack.dir, WallpaperPack.MANIFEST), json.toString(2))
+    }
+
+    /** Saves the user's values for the pack's shader parameters (see "params" in the manifest). */
+    fun writeParams(pack: WallpaperPack, values: Map<String, Float>) {
+        val json = JSONObject()
+        values.forEach { (id, value) -> json.put(id, value.toDouble()) }
+        replaceFile(File(pack.dir, PARAMS_FILE), json.toString())
+    }
+
+    fun readParams(pack: WallpaperPack): Map<String, Float> = try {
+        val json = JSONObject(File(pack.dir, PARAMS_FILE).readText())
+        json.keys().asSequence().associateWith { json.optDouble(it, 0.0).toFloat() }
+    } catch (e: Exception) {
+        emptyMap()
+    }
+
+    /** Writes the whole pack directory as a zip that the zip import reads back. */
+    fun exportZip(pack: WallpaperPack, dest: Uri) {
+        val root = pack.dir
+        val output = requireNotNull(appContext.contentResolver.openOutputStream(dest)) { "cannot write $dest" }
+        ZipOutputStream(output.buffered()).use { zip ->
+            root.walkTopDown().filter { it.isFile }.forEach { file ->
+                zip.putNextEntry(ZipEntry(file.relativeTo(root).invariantSeparatorsPath))
+                file.inputStream().use { it.copyTo(zip) }
+                zip.closeEntry()
+            }
+        }
+    }
+
+    /** Replaces a file in one step, so the wallpaper process never reads a half-written one. */
+    private fun replaceFile(file: File, text: String) {
+        val tmp = File(file.path + ".tmp")
+        tmp.writeText(text)
+        check(tmp.renameTo(file)) { "could not write ${file.name}" }
+    }
+
     fun delete(id: String) {
         File(packsDir, id).deleteRecursively()
         val home = activeId(Target.HOME).takeIf { it != id }
@@ -121,5 +167,7 @@ class PackStore(context: Context) {
     companion object {
         private const val TAG = "PackStore"
         const val ACTION_RELOAD = "app.wallengine.action.RELOAD"
+        /** Same file the shader layer reads its parameter values from. */
+        const val PARAMS_FILE = "params.json"
     }
 }
