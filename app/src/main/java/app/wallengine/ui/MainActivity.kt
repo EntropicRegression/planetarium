@@ -164,7 +164,7 @@ private fun LibraryScreen() {
             Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(16.dp)) {
                 if (serviceActive) {
                     Text(
-                        "已設為系統桌布,點選下方任一桌布即可切換",
+                        "已設為系統桌布,點選任一桌布即可切換",
                         Modifier.fillMaxWidth(),
                         textAlign = TextAlign.Center,
                         style = MaterialTheme.typography.bodyMedium,
