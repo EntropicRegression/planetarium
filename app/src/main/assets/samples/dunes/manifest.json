@@ -1,0 +1,7 @@
+{
+  "format": 1,
+  "name": "沙丘視差",
+  "layers": [
+    { "type": "shader", "src": "dunes.frag", "depth": 1 }
+  ]
+}
