@@ -6,9 +6,38 @@ import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Create
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material3.Button
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -134,10 +163,12 @@ private fun shaderFile(pack: WallpaperPack): File? =
  * edit its shader, rename, export, delete. [onChanged] is called after the library changed and
  * should refresh the list; [onDismiss] closes the whole thing.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PackActionsDialog(
     pack: WallpaperPack,
     store: PackStore,
+    kindLabel: String,
     startInEditor: Boolean,
     onApply: (Array<PackStore.Target>) -> Unit,
     onChanged: () -> Unit,
@@ -162,38 +193,83 @@ fun PackActionsDialog(
     }
 
     when (mode) {
-        Mode.Menu -> AlertDialog(
-            onDismissRequest = onDismiss,
-            title = { Text(pack.name) },
-            text = {
-                Column(Modifier.verticalScroll(rememberScrollState())) {
-                    MenuItem("套用到主畫面與鎖定畫面") {
-                        onApply(arrayOf(PackStore.Target.HOME, PackStore.Target.LOCK))
-                        onDismiss()
-                    }
-                    MenuItem("只套用到主畫面") {
-                        onApply(arrayOf(PackStore.Target.HOME))
-                        onDismiss()
-                    }
-                    MenuItem("只套用到鎖定畫面") {
-                        onApply(arrayOf(PackStore.Target.LOCK))
-                        onDismiss()
-                    }
-                    if (params.isNotEmpty()) MenuItem("調整參數") { mode = Mode.Params }
-                    if (shader != null) MenuItem("編輯 Shader") { mode = Mode.Editor }
-                    MenuItem("重新命名") { mode = Mode.Rename }
-                    MenuItem("匯出為 .zip") {
-                        try {
-                            exporter.launch(pack.name.replace(Regex("[\\\\/:*?\"<>|]"), "_") + ".zip")
-                        } catch (e: Exception) {
-                            Toast.makeText(context, "此裝置沒有可用的檔案選擇器", Toast.LENGTH_LONG).show()
+        Mode.Menu -> ModalBottomSheet(onDismissRequest = onDismiss) {
+            Column(Modifier.navigationBarsPadding().verticalScroll(rememberScrollState()).padding(bottom = 12.dp)) {
+                Row(Modifier.padding(horizontal = 24.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        Modifier
+                            .width(54.dp)
+                            .aspectRatio(9f / 16f)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant),
+                    ) {
+                        rememberThumbnail(pack, store)?.let {
+                            Image(it, contentDescription = null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
                         }
                     }
-                    MenuItem("刪除") { mode = Mode.ConfirmDelete }
+                    Column(Modifier.padding(start = 16.dp)) {
+                        Text(pack.name, maxLines = 2, style = MaterialTheme.typography.titleLarge)
+                        Text(
+                            kindLabel,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
                 }
-            },
-            confirmButton = { TextButton(onClick = onDismiss) { Text("關閉") } },
-        )
+
+                Text(
+                    "套用到",
+                    Modifier.padding(start = 24.dp, top = 20.dp, bottom = 8.dp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                Button(
+                    onClick = {
+                        onApply(arrayOf(PackStore.Target.HOME, PackStore.Target.LOCK))
+                        onDismiss()
+                    },
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
+                ) { Text("主畫面與鎖定畫面") }
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    FilledTonalButton(
+                        onClick = {
+                            onApply(arrayOf(PackStore.Target.HOME))
+                            onDismiss()
+                        },
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Icon(Icons.Filled.Home, contentDescription = null, Modifier.size(18.dp))
+                        Text("只有主畫面", Modifier.padding(start = 6.dp))
+                    }
+                    FilledTonalButton(
+                        onClick = {
+                            onApply(arrayOf(PackStore.Target.LOCK))
+                            onDismiss()
+                        },
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Icon(Icons.Filled.Lock, contentDescription = null, Modifier.size(18.dp))
+                        Text("只有鎖定畫面", Modifier.padding(start = 6.dp))
+                    }
+                }
+
+                HorizontalDivider(Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
+                if (params.isNotEmpty()) SheetAction(Icons.Filled.Settings, "調整參數") { mode = Mode.Params }
+                if (shader != null) SheetAction(Icons.Filled.Edit, "編輯 Shader") { mode = Mode.Editor }
+                SheetAction(Icons.Filled.Create, "重新命名") { mode = Mode.Rename }
+                SheetAction(Icons.Filled.Share, "匯出為 .zip") {
+                    try {
+                        exporter.launch(pack.name.replace(Regex("[\\\\/:*?\"<>|]"), "_") + ".zip")
+                    } catch (e: Exception) {
+                        Toast.makeText(context, "此裝置沒有可用的檔案選擇器", Toast.LENGTH_LONG).show()
+                    }
+                }
+                SheetAction(Icons.Filled.Delete, "刪除", MaterialTheme.colorScheme.error) { mode = Mode.ConfirmDelete }
+            }
+        }
 
         Mode.Params -> ParamsDialog(pack, store, params, onDismiss)
 
@@ -242,10 +318,14 @@ fun PackActionsDialog(
 }
 
 @Composable
-private fun MenuItem(label: String, onClick: () -> Unit) {
-    TextButton(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
-        Text(label, Modifier.fillMaxWidth(), textAlign = TextAlign.Start)
-    }
+private fun SheetAction(icon: ImageVector, label: String, tint: Color = Color.Unspecified, onClick: () -> Unit) {
+    val color = if (tint == Color.Unspecified) MaterialTheme.colorScheme.onSurface else tint
+    ListItem(
+        headlineContent = { Text(label, color = color) },
+        leadingContent = { Icon(icon, contentDescription = null, tint = color) },
+        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+        modifier = Modifier.clickable(onClick = onClick).padding(horizontal = 8.dp),
+    )
 }
 
 @Composable
