@@ -1,4 +1,4 @@
-package app.wallengine.engine
+package app.planetarium.engine
 
 import android.graphics.SurfaceTexture
 import android.net.Uri
@@ -15,9 +15,9 @@ import androidx.media3.common.VideoSize
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
-import app.wallengine.engine.gl.ShaderProgram
-import app.wallengine.pack.LayerSpec
-import app.wallengine.pack.WallpaperPack
+import app.planetarium.engine.gl.ShaderProgram
+import app.planetarium.pack.LayerSpec
+import app.planetarium.pack.WallpaperPack
 
 /**
  * A looping, muted video, scaled to cover the screen and panning like [ImageLayer].

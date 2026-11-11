@@ -1,4 +1,4 @@
-# WallEngine pack format
+# Planetarium pack format
 
 A wallpaper pack is a directory (or a `.zip` of one) holding `manifest.json` and the files it
 refers to. Packs contain data only: JSON, GLSL text, images and video. Nothing in a pack is ever

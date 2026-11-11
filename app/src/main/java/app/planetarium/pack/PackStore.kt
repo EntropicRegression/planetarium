@@ -1,11 +1,11 @@
-package app.wallengine.pack
+package app.planetarium.pack
 
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
 import android.util.Log
-import app.wallengine.engine.gl.BitmapLoader
+import app.planetarium.engine.gl.BitmapLoader
 import org.json.JSONObject
 import java.io.File
 import java.util.UUID
@@ -166,7 +166,7 @@ class PackStore(context: Context) {
 
     companion object {
         private const val TAG = "PackStore"
-        const val ACTION_RELOAD = "app.wallengine.action.RELOAD"
+        const val ACTION_RELOAD = "app.planetarium.action.RELOAD"
         /** Same file the shader layer reads its parameter values from. */
         const val PARAMS_FILE = "params.json"
     }

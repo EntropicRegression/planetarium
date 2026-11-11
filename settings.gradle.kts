@@ -13,5 +13,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "WallEngine"
+rootProject.name = "Planetarium"
 include(":app")

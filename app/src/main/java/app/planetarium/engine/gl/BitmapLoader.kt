@@ -1,4 +1,4 @@
-package app.wallengine.engine.gl
+package app.planetarium.engine.gl
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory

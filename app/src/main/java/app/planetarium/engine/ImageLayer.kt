@@ -1,12 +1,12 @@
-package app.wallengine.engine
+package app.planetarium.engine
 
 import android.graphics.BitmapFactory
 import android.opengl.GLES30
-import app.wallengine.engine.gl.BitmapLoader
-import app.wallengine.engine.gl.ShaderProgram
-import app.wallengine.engine.gl.Texture2D
-import app.wallengine.pack.LayerSpec
-import app.wallengine.pack.WallpaperPack
+import app.planetarium.engine.gl.BitmapLoader
+import app.planetarium.engine.gl.ShaderProgram
+import app.planetarium.engine.gl.Texture2D
+import app.planetarium.pack.LayerSpec
+import app.planetarium.pack.WallpaperPack
 import java.io.File
 import kotlin.math.PI
 import kotlin.math.cos

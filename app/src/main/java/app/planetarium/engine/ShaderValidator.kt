@@ -1,4 +1,4 @@
-package app.wallengine.engine
+package app.planetarium.engine
 
 import android.content.Context
 import android.graphics.Bitmap
@@ -13,8 +13,8 @@ import android.opengl.GLES30
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
-import app.wallengine.engine.gl.FullscreenQuad
-import app.wallengine.pack.WallpaperPack
+import app.planetarium.engine.gl.FullscreenQuad
+import app.planetarium.pack.WallpaperPack
 import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -136,7 +136,7 @@ object ShaderValidator {
     }
 
     /**
-     * A GLES 3 context current on a small pbuffer. [EglCore][app.wallengine.engine.gl.EglCore]
+     * A GLES 3 context current on a small pbuffer. [EglCore][app.planetarium.engine.gl.EglCore]
      * only does window surfaces. The display is deliberately not terminated: in this process it
      * is shared with the UI toolkit's renderer.
      */

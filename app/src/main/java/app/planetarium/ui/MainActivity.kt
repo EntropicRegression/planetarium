@@ -1,4 +1,4 @@
-package app.wallengine.ui
+package app.planetarium.ui
 
 import android.app.WallpaperManager
 import android.content.ComponentName
@@ -95,9 +95,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
-import app.wallengine.engine.GlWallpaperService
-import app.wallengine.pack.PackStore
-import app.wallengine.pack.WallpaperPack
+import app.planetarium.engine.GlWallpaperService
+import app.planetarium.pack.PackStore
+import app.planetarium.pack.WallpaperPack
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -346,7 +346,7 @@ private fun ApplyBanner(hasPacks: Boolean, onApply: () -> Unit) {
             Text("還沒有設為系統桌布", style = MaterialTheme.typography.titleMedium)
             Text(
                 if (hasPacks) "設定一次之後,在這裡選的桌布就會直接出現在主畫面與鎖定畫面。"
-                else "先新增一個桌布,再把 WallEngine 設為系統桌布。",
+                else "先新增一個桌布,再把 Planetarium 設為系統桌布。",
                 Modifier.padding(top = 4.dp, bottom = 12.dp),
                 style = MaterialTheme.typography.bodyMedium,
             )

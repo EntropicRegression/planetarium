@@ -1,4 +1,4 @@
-package app.wallengine.ui
+package app.planetarium.ui
 
 import android.content.Context
 import android.graphics.Bitmap
@@ -48,9 +48,9 @@ import androidx.media3.transformer.ExportException
 import androidx.media3.transformer.ExportResult
 import androidx.media3.transformer.ProgressHolder
 import androidx.media3.transformer.Transformer
-import app.wallengine.pack.LayerSpec
-import app.wallengine.pack.PackStore
-import app.wallengine.pack.WallpaperPack
+import app.planetarium.pack.LayerSpec
+import app.planetarium.pack.PackStore
+import app.planetarium.pack.WallpaperPack
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope

@@ -1,4 +1,4 @@
-// WallEngine sample "plasma": slowly drifting colour bands.
+// Planetarium sample "plasma": slowly drifting colour bands.
 // Shadertoy style: only mainImage is defined; the app supplies the uniforms and main().
 // "speed" is a pack parameter declared in manifest.json.
 

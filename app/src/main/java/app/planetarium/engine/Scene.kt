@@ -1,12 +1,12 @@
-package app.wallengine.engine
+package app.planetarium.engine
 
 import android.content.Context
 import android.opengl.GLES30
 import android.os.Handler
 import android.util.Log
-import app.wallengine.engine.gl.FullscreenQuad
-import app.wallengine.pack.LayerSpec
-import app.wallengine.pack.WallpaperPack
+import app.planetarium.engine.gl.FullscreenQuad
+import app.planetarium.pack.LayerSpec
+import app.planetarium.pack.WallpaperPack
 
 /** Inputs that drive a scene. Written from the main thread, read by the render thread. */
 class InputState {

@@ -1,4 +1,4 @@
-package app.wallengine.engine.gl
+package app.planetarium.engine.gl
 
 import android.opengl.EGL14
 import android.opengl.EGLConfig

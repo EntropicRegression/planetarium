@@ -1,4 +1,4 @@
-package app.wallengine.ui
+package app.planetarium.ui
 
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -32,11 +32,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import app.wallengine.engine.Parallax
-import app.wallengine.engine.gl.BitmapLoader
-import app.wallengine.pack.LayerSpec
-import app.wallengine.pack.PackStore
-import app.wallengine.pack.WallpaperPack
+import app.planetarium.engine.Parallax
+import app.planetarium.engine.gl.BitmapLoader
+import app.planetarium.pack.LayerSpec
+import app.planetarium.pack.PackStore
+import app.planetarium.pack.WallpaperPack
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext

@@ -1,4 +1,4 @@
-package app.wallengine.pack
+package app.planetarium.pack
 
 import org.json.JSONArray
 import org.json.JSONObject

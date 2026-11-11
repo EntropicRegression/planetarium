@@ -1,4 +1,4 @@
-// WallEngine sample "ripple": a pool whose surface reacts to touch.
+// Planetarium sample "ripple": a pool whose surface reacts to touch.
 //
 // iChannel0 is "self": the previous frame of this layer. The shader runs twice per frame:
 //   uPass == 0  one step of a wave simulation, written into the feedback buffer

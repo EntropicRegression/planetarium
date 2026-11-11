@@ -1,4 +1,4 @@
-package app.wallengine.engine
+package app.planetarium.engine
 
 import android.app.KeyguardManager
 import android.app.WallpaperColors
@@ -15,8 +15,8 @@ import android.service.wallpaper.WallpaperService
 import android.view.MotionEvent
 import android.view.SurfaceHolder
 import androidx.core.content.ContextCompat
-import app.wallengine.pack.PackStore
-import app.wallengine.pack.WallpaperPack
+import app.planetarium.pack.PackStore
+import app.planetarium.pack.WallpaperPack
 
 class GlWallpaperService : WallpaperService() {
 

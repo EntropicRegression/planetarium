@@ -1,4 +1,4 @@
-package app.wallengine.engine
+package app.planetarium.engine
 
 import android.content.Context
 import android.opengl.GLES30
@@ -7,8 +7,8 @@ import android.os.HandlerThread
 import android.util.Log
 import android.view.Choreographer
 import android.view.Surface
-import app.wallengine.engine.gl.EglCore
-import app.wallengine.pack.WallpaperPack
+import app.planetarium.engine.gl.EglCore
+import app.planetarium.pack.WallpaperPack
 import java.util.concurrent.CountDownLatch
 
 /**

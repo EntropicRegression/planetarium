@@ -1,4 +1,4 @@
-package app.wallengine.ui
+package app.planetarium.ui
 
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -34,9 +34,9 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import app.wallengine.pack.PackStore
-import app.wallengine.pack.WallpaperPack
-import app.wallengine.ui.ShaderPackImporter.Outcome
+import app.planetarium.pack.PackStore
+import app.planetarium.pack.WallpaperPack
+import app.planetarium.ui.ShaderPackImporter.Outcome
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext

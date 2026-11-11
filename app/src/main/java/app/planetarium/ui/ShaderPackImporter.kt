@@ -1,13 +1,13 @@
-package app.wallengine.ui
+package app.planetarium.ui
 
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
 import android.util.Log
-import app.wallengine.engine.ShaderValidator
-import app.wallengine.pack.LayerSpec
-import app.wallengine.pack.PackStore
-import app.wallengine.pack.WallpaperPack
+import app.planetarium.engine.ShaderValidator
+import app.planetarium.pack.LayerSpec
+import app.planetarium.pack.PackStore
+import app.planetarium.pack.WallpaperPack
 import org.json.JSONObject
 import java.io.BufferedInputStream
 import java.io.File

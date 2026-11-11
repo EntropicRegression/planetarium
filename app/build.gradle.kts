@@ -5,15 +5,15 @@ plugins {
 }
 
 android {
-    namespace = "app.wallengine"
+    namespace = "app.planetarium"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "app.wallengine"
+        applicationId = "app.planetarium"
         minSdk = 28
         targetSdk = 35
-        versionCode = 2
-        versionName = "1.0.1"
+        versionCode = 3
+        versionName = "1.1.0"
         // Real phones and the x86_64 emulator; dropping 32-bit keeps the native libraries small.
         ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
     }

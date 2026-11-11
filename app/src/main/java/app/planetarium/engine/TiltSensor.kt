@@ -1,4 +1,4 @@
-package app.wallengine.engine
+package app.planetarium.engine
 
 import android.content.Context
 import android.hardware.Sensor

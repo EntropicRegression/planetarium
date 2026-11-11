@@ -1,4 +1,4 @@
-package app.wallengine.ui
+package app.planetarium.ui
 
 import android.content.Context
 import android.graphics.Bitmap
@@ -31,11 +31,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import app.wallengine.depth.DepthEstimator
-import app.wallengine.engine.gl.BitmapLoader
-import app.wallengine.pack.LayerSpec
-import app.wallengine.pack.PackStore
-import app.wallengine.pack.WallpaperPack
+import app.planetarium.depth.DepthEstimator
+import app.planetarium.engine.gl.BitmapLoader
+import app.planetarium.pack.LayerSpec
+import app.planetarium.pack.PackStore
+import app.planetarium.pack.WallpaperPack
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext

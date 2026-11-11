@@ -74,7 +74,7 @@
 ## 7. 省電與耗電
 
 - [ ] 開啟系統省電模式 → 動畫凍結、影片暫停、傾斜無反應;關閉後恢復。
-- [ ] 套用影片桌布,正常使用半天 → 到「設定 → 電池」查看 WallEngine 的耗電比例,記下數字。
+- [ ] 套用影片桌布,正常使用半天 → 到「設定 → 電池」查看 Planetarium 的耗電比例,記下數字。
 - [ ] 同樣測一次「飄雪」空間照片與「水波漣漪」。這兩種會持續以 30fps 繪製,預期最耗電。
 - [ ] 套用效果為「無」的空間照片,手機靜置 → 耗電應接近靜態桌布。
 - [ ] 手機明顯發燙或桌面滑動變卡 → 記下是哪一種桌布。
@@ -96,7 +96,7 @@
 
 ## 已知行為(不是錯誤)
 
-- 在「設定 → 應用程式」對 WallEngine 按**強制停止**,系統會把桌布重設回預設,需要回 App 重新按「設為系統桌布」。
+- 在「設定 → 應用程式」對 Planetarium 按**強制停止**,系統會把桌布重設回預設,需要回 App 重新按「設為系統桌布」。
 - 桌面只有一頁時,比螢幕寬的圖片會顯示最左側而不是置中。
 - 越前面的圖層會被放大越多(避免傾斜時露邊)。
 - 部分廠牌(尤其 Samsung)的鎖定畫面可能不顯示第三方動態桌布,這是系統限制。
@@ -106,12 +106,12 @@
 重現問題後,手機接著電腦執行:
 
 ```
-adb logcat -d -v time > wallengine-log.txt
+adb logcat -d -v time > planetarium-log.txt
 ```
 
-把 `wallengine-log.txt` 交給我即可。裡面是手機的系統記錄,可能包含其他 App 的名稱與通知標題,
-若有顧慮可以只擷取含 `wallengine`、`Renderer`、`Scene`、`VideoLayer`、`ShaderLayer`、`AndroidRuntime` 的行:
+把 `planetarium-log.txt` 交給我即可。裡面是手機的系統記錄,可能包含其他 App 的名稱與通知標題,
+若有顧慮可以只擷取含 `planetarium`、`Renderer`、`Scene`、`VideoLayer`、`ShaderLayer`、`AndroidRuntime` 的行:
 
 ```
-adb logcat -d -v time | findstr /i "wallengine Renderer Scene VideoLayer ShaderLayer AndroidRuntime" > wallengine-log.txt
+adb logcat -d -v time | findstr /i "planetarium Renderer Scene VideoLayer ShaderLayer AndroidRuntime" > planetarium-log.txt
 ```

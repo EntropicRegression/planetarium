@@ -1,5 +1,5 @@
 #version 300 es
-// WallEngine sample "dunes": layered dunes at dusk that slide past each other as you swipe
+// Planetarium sample "dunes": layered dunes at dusk that slide past each other as you swipe
 // between launcher pages (uOffset).
 //
 // Complete-shader style: the file has its own #version line, declares the uniforms it needs

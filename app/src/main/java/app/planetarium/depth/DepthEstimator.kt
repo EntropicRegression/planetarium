@@ -1,4 +1,4 @@
-package app.wallengine.depth
+package app.planetarium.depth
 
 import ai.onnxruntime.OnnxTensor
 import ai.onnxruntime.OrtEnvironment

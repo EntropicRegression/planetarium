@@ -1,4 +1,4 @@
-package app.wallengine.ui
+package app.planetarium.ui
 
 import android.content.Context
 import android.util.Log
@@ -78,9 +78,9 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import app.wallengine.engine.ShaderValidator
-import app.wallengine.pack.PackStore
-import app.wallengine.pack.WallpaperPack
+import app.planetarium.engine.ShaderValidator
+import app.planetarium.pack.PackStore
+import app.planetarium.pack.WallpaperPack
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -149,7 +149,7 @@ internal fun createBlankShaderPack(context: Context, store: PackStore, name: Str
     )
     val pack = store.createPack(name, extras) { dir ->
         File(dir, "main.frag").writeText(BLANK_SHADER)
-        listOf(app.wallengine.pack.LayerSpec(WallpaperPack.TYPE_SHADER, "main.frag"))
+        listOf(app.planetarium.pack.LayerSpec(WallpaperPack.TYPE_SHADER, "main.frag"))
     }
     // Renders the preview image; the starter is known to compile.
     ShaderValidator.validate(context, pack)

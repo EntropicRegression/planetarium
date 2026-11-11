@@ -1,16 +1,16 @@
-package app.wallengine.engine
+package app.planetarium.engine
 
 import android.graphics.Bitmap
 import android.graphics.Matrix
 import android.opengl.GLES30
 import android.util.Log
-import app.wallengine.engine.ShaderConfig.Channel
-import app.wallengine.engine.gl.BitmapLoader
-import app.wallengine.engine.gl.FullscreenQuad
-import app.wallengine.engine.gl.ShaderProgram
-import app.wallengine.engine.gl.Texture2D
-import app.wallengine.pack.LayerSpec
-import app.wallengine.pack.WallpaperPack
+import app.planetarium.engine.ShaderConfig.Channel
+import app.planetarium.engine.gl.BitmapLoader
+import app.planetarium.engine.gl.FullscreenQuad
+import app.planetarium.engine.gl.ShaderProgram
+import app.planetarium.engine.gl.Texture2D
+import app.planetarium.pack.LayerSpec
+import app.planetarium.pack.WallpaperPack
 import kotlin.math.roundToInt
 
 /**
