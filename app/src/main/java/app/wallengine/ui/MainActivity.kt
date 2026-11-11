@@ -33,7 +33,9 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -95,13 +97,20 @@ private fun LibraryScreen() {
     val scope = rememberCoroutineScope()
 
     var packs by remember { mutableStateOf(emptyList<WallpaperPack>()) }
-    var activeId by remember { mutableStateOf<String?>(null) }
+    var activeHome by remember { mutableStateOf<String?>(null) }
+    var activeLock by remember { mutableStateOf<String?>(null) }
     var serviceActive by remember { mutableStateOf(false) }
+    /** The pack whose "apply to" dialog is open. */
+    var choosingFor by remember { mutableStateOf<WallpaperPack?>(null) }
 
     suspend fun refresh() {
-        val (list, active) = withContext(Dispatchers.IO) { store.list() to store.activeId(PackStore.Target.HOME) }
+        val (list, active) = withContext(Dispatchers.IO) {
+            store.list() to (store.activeId(PackStore.Target.HOME) to store.activeId(PackStore.Target.LOCK))
+        }
         packs = list
-        activeId = active
+        activeHome = active.first
+        // No separate lock choice means the lock screen shows the home wallpaper.
+        activeLock = active.second ?: active.first
     }
 
     // Also re-checks whether we are the system wallpaper after returning from the system picker.
@@ -111,11 +120,36 @@ private fun LibraryScreen() {
         onPauseOrDispose { }
     }
 
-    fun select(id: String?) {
+    fun select(id: String?, vararg targets: PackStore.Target = arrayOf(PackStore.Target.HOME, PackStore.Target.LOCK)) {
         scope.launch {
-            withContext(Dispatchers.IO) { store.setActive(id, PackStore.Target.HOME, PackStore.Target.LOCK) }
+            withContext(Dispatchers.IO) { store.setActive(id, *targets) }
             refresh()
         }
+    }
+
+    choosingFor?.let { pack ->
+        AlertDialog(
+            onDismissRequest = { choosingFor = null },
+            title = { Text("套用「${pack.name}」到") },
+            text = {
+                Column {
+                    listOf(
+                        "主畫面與鎖定畫面" to arrayOf(PackStore.Target.HOME, PackStore.Target.LOCK),
+                        "只有主畫面" to arrayOf(PackStore.Target.HOME),
+                        "只有鎖定畫面" to arrayOf(PackStore.Target.LOCK),
+                    ).forEach { (label, targets) ->
+                        TextButton(
+                            onClick = {
+                                choosingFor = null
+                                select(pack.id, *targets)
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) { Text(label, Modifier.fillMaxWidth()) }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { choosingFor = null }) { Text("取消") } },
+        )
     }
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
@@ -203,8 +237,13 @@ private fun LibraryScreen() {
                     PackCard(
                         pack = pack,
                         store = store,
-                        selected = pack.id == activeId,
-                        onSelect = { select(pack.id) },
+                        badge = when {
+                            pack.id == activeHome && pack.id == activeLock -> "主畫面+鎖定"
+                            pack.id == activeHome -> "主畫面"
+                            pack.id == activeLock -> "鎖定"
+                            else -> null
+                        },
+                        onSelect = { choosingFor = pack },
                         onDelete = {
                             scope.launch {
                                 withContext(Dispatchers.IO) { store.delete(pack.id) }
@@ -222,7 +261,7 @@ private fun LibraryScreen() {
 private fun PackCard(
     pack: WallpaperPack,
     store: PackStore,
-    selected: Boolean,
+    badge: String?,
     onSelect: () -> Unit,
     onDelete: () -> Unit,
 ) {
@@ -231,7 +270,7 @@ private fun PackCard(
     }
     Card(
         modifier = Modifier.clickable(onClick = onSelect),
-        border = if (selected) BorderStroke(3.dp, MaterialTheme.colorScheme.primary) else null,
+        border = if (badge != null) BorderStroke(3.dp, MaterialTheme.colorScheme.primary) else null,
     ) {
         Box(
             Modifier.fillMaxWidth().aspectRatio(9f / 16f).background(MaterialTheme.colorScheme.surfaceVariant),
@@ -241,13 +280,22 @@ private fun PackCard(
             }
         }
         Row(Modifier.padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                if (selected) "${pack.name}(使用中)" else pack.name,
-                Modifier.weight(1f),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                style = MaterialTheme.typography.bodyMedium,
-            )
+            Column(Modifier.weight(1f)) {
+                Text(
+                    pack.name,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                if (badge != null) {
+                    Text(
+                        badge,
+                        maxLines = 1,
+                        color = MaterialTheme.colorScheme.primary,
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                }
+            }
             IconButton(onClick = onDelete) {
                 Icon(Icons.Filled.Delete, contentDescription = "刪除 ${pack.name}")
             }

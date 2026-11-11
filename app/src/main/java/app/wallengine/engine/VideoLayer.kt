@@ -53,6 +53,8 @@ class VideoLayer(pack: WallpaperPack, spec: LayerSpec, private val host: LayerHo
     /** Displayed (rotation and pixel aspect applied) width / height; 0 while unknown. */
     private var videoAspect = 0f
     private var released = false
+    private var lastRequestNanos = 0L
+    private var drawPending = false
 
     init {
         val file = pack.asset(spec.src)
@@ -76,7 +78,7 @@ class VideoLayer(pack: WallpaperPack, spec: LayerSpec, private val host: LayerHo
         surfaceTexture.setOnFrameAvailableListener({
             if (!released) {
                 hasFrame = true
-                host.requestRender()
+                requestFrame()
             }
         }, host.handler)
         surface = Surface(surfaceTexture)
@@ -152,6 +154,29 @@ class VideoLayer(pack: WallpaperPack, spec: LayerSpec, private val host: LayerHo
         GLES30.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, 0)
     }
 
+    /**
+     * Asks for a draw for a newly decoded frame, at most [MAX_FPS] times a second: a 60 fps video
+     * would otherwise redraw the whole scene twice as often as the wallpaper needs. A frame that
+     * arrives too early is not lost, it is drawn when its turn comes. Render thread.
+     */
+    private fun requestFrame() {
+        if (drawPending) return
+        val wait = lastRequestNanos + 1_000_000_000L / MAX_FPS - System.nanoTime()
+        if (wait <= 0) {
+            lastRequestNanos = System.nanoTime()
+            host.requestRender()
+        } else {
+            drawPending = true
+            host.handler.postDelayed({
+                drawPending = false
+                if (!released) {
+                    lastRequestNanos = System.nanoTime()
+                    host.requestRender()
+                }
+            }, wait / 1_000_000)
+        }
+    }
+
     override fun onVisibilityChanged(visible: Boolean) {
         if (released) return
         if (visible) {
@@ -185,6 +210,7 @@ class VideoLayer(pack: WallpaperPack, spec: LayerSpec, private val host: LayerHo
 
     private companion object {
         const val TAG = "VideoLayer"
+        const val MAX_FPS = 30
         const val MIN_BUFFER_MS = 2_000
         const val MAX_BUFFER_MS = 5_000
         const val PLAYBACK_BUFFER_MS = 250
