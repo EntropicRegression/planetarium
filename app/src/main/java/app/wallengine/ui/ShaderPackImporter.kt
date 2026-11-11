@@ -23,10 +23,11 @@ internal object ShaderPackImporter {
     }
 
     /** A built-in example pack: a directory under assets/samples holding a complete pack. */
-    class Sample(val assetDir: String, val name: String)
+    class Sample(val assetDir: String, val name: String, val layered: Boolean = false)
 
     private const val TAG = "ShaderPackImporter"
     private const val SAMPLES_DIR = "samples"
+    private const val SEEDED_FILE = "samples-installed.txt"
     private const val SHADER_FILE = "shader.frag"
     private const val MAX_SHADER_BYTES = 1 shl 20
     private const val MAX_ZIP_BYTES = 300L * 1024 * 1024
@@ -52,12 +53,54 @@ internal object ShaderPackImporter {
                 val manifest = context.assets.open("$SAMPLES_DIR/$dir/${WallpaperPack.MANIFEST}").use {
                     JSONObject(it.readBytes().decodeToString())
                 }
-                Sample("$SAMPLES_DIR/$dir", manifest.optString("name", dir))
+                val layers = manifest.optJSONArray("layers")
+                val layered = layers != null && (0 until layers.length()).any {
+                    layers.optJSONObject(it)?.optString("type") != WallpaperPack.TYPE_SHADER
+                }
+                Sample("$SAMPLES_DIR/$dir", manifest.optString("name", dir), layered)
             } catch (e: Exception) {
                 Log.w(TAG, "bad sample $dir", e)
                 null
             }
         }
+
+    /**
+     * Puts the built-in samples into the library without being asked: on first launch all of
+     * them, after an update only the ones that are new. Each sample is offered once, so deleting
+     * one does not bring it back. On a library with no wallpaper chosen yet, the last one added
+     * becomes the wallpaper. Returns how many packs were added.
+     */
+    @Synchronized
+    fun installNewSamples(context: Context, store: PackStore): Int {
+        val record = File(context.createDeviceProtectedStorageContext().filesDir, SEEDED_FILE)
+        val seeded = try {
+            record.readLines().filter { it.isNotBlank() }.toMutableSet()
+        } catch (e: IOException) {
+            mutableSetOf()
+        }
+        // Layered scenes last: the library lists the newest pack first.
+        val fresh = samples(context).filter { it.assetDir !in seeded }.sortedBy { it.layered }
+        if (fresh.isEmpty()) return 0
+        var last: WallpaperPack? = null
+        var added = 0
+        fresh.forEach { sample ->
+            when (val outcome = importSample(context, store, sample)) {
+                is Outcome.Imported -> {
+                    last = outcome.pack
+                    added++
+                }
+                is Outcome.Rejected -> Log.w(TAG, "sample ${sample.assetDir} not installed: ${outcome.detail}")
+            }
+            // Recorded even when rejected: a sample this device cannot run is not retried every launch.
+            seeded += sample.assetDir
+        }
+        record.writeText(seeded.sorted().joinToString(System.lineSeparator()))
+        val chosen = last
+        if (chosen != null && store.activeId(PackStore.Target.HOME) == null) {
+            store.setActive(chosen.id, PackStore.Target.HOME, PackStore.Target.LOCK)
+        }
+        return added
+    }
 
     fun importShaderFile(context: Context, store: PackStore, uri: Uri): Outcome = finish(context, store) {
         val fileName = displayName(context, uri) ?: "shader"

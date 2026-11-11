@@ -61,7 +61,9 @@ import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -177,6 +179,12 @@ private fun LibraryScreen() {
 
     suspend fun refresh() {
         val (list, active) = withContext(Dispatchers.IO) {
+            // First launch (or a new version with more samples): the built-in wallpapers appear by themselves.
+            try {
+                ShaderPackImporter.installNewSamples(context.applicationContext, store)
+            } catch (e: Exception) {
+                android.util.Log.w("LibraryScreen", "built-in samples not installed", e)
+            }
             store.list() to (store.activeId(PackStore.Target.HOME) to store.activeId(PackStore.Target.LOCK))
         }
         packs = list
@@ -524,8 +532,11 @@ private class ImportOption(val icon: ImageVector, val title: String, val descrip
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ImportSheet(options: List<ImportOption>, onDismiss: () -> Unit) {
-    ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(Modifier.navigationBarsPadding().padding(bottom = 12.dp)) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+    ) {
+        Column(Modifier.navigationBarsPadding().verticalScroll(rememberScrollState()).padding(bottom = 12.dp)) {
             Text(
                 "新增桌布",
                 Modifier.padding(start = 24.dp, end = 24.dp, bottom = 8.dp),

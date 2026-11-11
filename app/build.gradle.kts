@@ -12,8 +12,8 @@ android {
         applicationId = "app.wallengine"
         minSdk = 28
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.0.1"
         // Real phones and the x86_64 emulator; dropping 32-bit keeps the native libraries small.
         ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
     }
