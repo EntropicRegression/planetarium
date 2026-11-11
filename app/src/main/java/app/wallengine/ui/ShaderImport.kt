@@ -110,7 +110,7 @@ fun rememberShaderImporter(store: PackStore, onImported: (WallpaperPack) -> Unit
                             )
                         }
                     }
-                    ChoiceRow("內建範例", "加入一個範例 shader 桌布") {
+                    ChoiceRow("內建範例", "加入內建的空間桌布或 shader 桌布") {
                         step = ImportStep.Busy
                         scope.launch {
                             samples = withContext(Dispatchers.IO) {

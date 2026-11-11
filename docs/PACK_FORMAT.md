@@ -77,6 +77,28 @@ part that does not fit horizontally is used to pan with the launcher's page scro
 | Option     | Type   | Meaning |
 |------------|--------|---------|
 | `depthMap` | string | Path of a greyscale image of the same framing: white = near, black = far. The image is then displaced per pixel by its depth instead of sliding as a whole, giving a single photo continuous parallax. The layer's own `depth` is ignored. |
+| `sprites`  | array  | Up to 4 small animated patches drawn over the image, see below. A layer with sprites redraws continuously (at most 30 times a second). |
+
+Each sprite is a strip image holding its frames side by side, all the same size. Inside its
+rectangle the current frame **replaces** the image, transparency included, so a frame must
+contain everything that should be visible there, not only the moving part.
+
+| Sprite key | Type   | Meaning |
+|------------|--------|---------|
+| `src`      | string | Path of the strip image. |
+| `frames`   | number | Frames in the strip (default 1). |
+| `x`, `y`   | number | Top-left corner of the patch, in pixels of the layer's image file. One frame is drawn at its own pixel size, so strip and image must share a scale. |
+| `play`     | string | `loop` (default): frame after frame at `fps`. `swing`: back and forth through the frames once per `period` seconds, easing at both ends. `sometimes`: rests on frame 0 and plays the other frames once at `fps`, about once per `every` seconds at an irregular moment. |
+| `fps`      | number | Frames per second for `loop` and `sometimes` (default 8). |
+| `period`   | number | Seconds for one full swing (default 2). |
+| `every`    | number | Seconds between `sometimes` plays, on average (default 6). |
+
+```json
+{ "type": "image", "src": "balcony.png", "depth": 0.05, "sprites": [
+  { "src": "cat-tail.png", "frames": 7, "x": 0, "y": 1812, "play": "swing", "period": 3.2 },
+  { "src": "cat-ears.png", "frames": 5, "x": 108, "y": 1620, "play": "sometimes", "fps": 9, "every": 7 }
+] }
+```
 
 ### `video`
 
