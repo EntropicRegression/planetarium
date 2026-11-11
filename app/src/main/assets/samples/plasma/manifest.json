@@ -1,0 +1,10 @@
+{
+  "format": 1,
+  "name": "流動極光",
+  "layers": [
+    { "type": "shader", "src": "plasma.frag", "depth": 1 }
+  ],
+  "params": [
+    { "id": "speed", "type": "float", "min": 0, "max": 3, "default": 1 }
+  ]
+}

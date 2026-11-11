@@ -1,0 +1,7 @@
+{
+  "format": 1,
+  "name": "水波漣漪",
+  "layers": [
+    { "type": "shader", "src": "ripple.frag", "depth": 1, "channels": ["self"], "scale": 0.25 }
+  ]
+}
