@@ -131,6 +131,17 @@ internal object ShaderPackImporter {
         }
     }
 
+    /** A pack that is already in memory (made by the AI studio), checked like any other zip. */
+    fun importZipStream(context: Context, store: PackStore, input: InputStream): Outcome = finish(context, store) {
+        store.createPackRaw { dir ->
+            input.use { extractZip(it, dir) }
+            hoistSingleFolder(dir)
+            if (!File(dir, WallpaperPack.MANIFEST).isFile) {
+                throw IOException("壓縮檔內找不到 manifest.json(應位於根目錄,或唯一的最上層資料夾內)")
+            }
+        }
+    }
+
     fun importSample(context: Context, store: PackStore, sample: Sample): Outcome = finish(context, store) {
         store.createPackRaw { dir -> copyAssetDir(context, sample.assetDir, dir) }
     }

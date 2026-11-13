@@ -2,10 +2,13 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- This app works entirely offline. Strip network access even if a library asks for it. -->
-    <uses-permission
-        android:name="android.permission.INTERNET"
-        tools:node="remove" />
+    <!--
+      The network is used by the AI studio screen only (studio/StudioServer.kt): to reach the AI
+      service the person chose, and for a loopback server that the screen's WebView loads its page
+      from. The wallpaper itself and the rest of the app work offline.
+    -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Nothing here needs to know about the connection; drop it even if a library asks for it. -->
     <uses-permission
         android:name="android.permission.ACCESS_NETWORK_STATE"
         tools:node="remove" />
@@ -21,6 +24,7 @@
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
+        android:networkSecurityConfig="@xml/network_security"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.NoActionBar">
 
@@ -30,6 +34,26 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!--
+          singleTask: returning from the sign-in page in the browser (planetarium://studio) comes
+          back to the screen that is waiting, instead of opening a second one.
+        -->
+        <activity
+            android:name=".studio.StudioActivity"
+            android:configChanges="orientation|screenSize|screenLayout|keyboard|keyboardHidden|uiMode"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:host="studio"
+                    android:scheme="planetarium" />
             </intent-filter>
         </activity>
 

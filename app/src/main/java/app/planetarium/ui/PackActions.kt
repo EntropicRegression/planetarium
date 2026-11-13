@@ -22,6 +22,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Create
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Face
+import app.planetarium.studio.StudioActivity
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Settings
@@ -264,6 +266,13 @@ fun PackActionsDialog(
                 HorizontalDivider(Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
                 if (params.isNotEmpty()) SheetAction(Icons.Filled.Settings, "調整參數") { mode = Mode.Params }
                 if (shader != null) SheetAction(Icons.Filled.Edit, "編輯 Shader") { mode = Mode.Editor }
+                // The studio works on picture and video layers; a pack of shaders has nothing for it.
+                if (pack.layers.any { it.type != WallpaperPack.TYPE_SHADER }) {
+                    SheetAction(Icons.Filled.Face, "用 AI 修改(另存為新桌布)") {
+                        StudioActivity.open(context, pack.id)
+                        onDismiss()
+                    }
+                }
                 SheetAction(Icons.Filled.Create, "重新命名") { mode = Mode.Rename }
                 SheetAction(Icons.Filled.Share, "匯出為 .zip") {
                     try {

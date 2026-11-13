@@ -62,6 +62,8 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.filled.Face
+import app.planetarium.studio.StudioActivity
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.Scaffold
@@ -309,6 +311,9 @@ private fun LibraryScreen() {
         ImportSheet(
             onDismiss = { importOpen = false },
             options = listOf(
+                ImportOption(Icons.Filled.Face, "AI 生成桌布", "用文字和參考圖,讓 AI 畫出有遠近的空間桌布(需要網路)") {
+                    StudioActivity.open(context)
+                },
                 ImportOption(Icons.Filled.AccountBox, "圖片", "把一張照片設成桌布") {
                     pickImage.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
                 },
