@@ -27,6 +27,8 @@ import kotlin.math.sin
  */
 class ImageLayer(pack: WallpaperPack, private val spec: LayerSpec, maxTextureSize: Int) : Layer {
     private val parallax = Parallax.of(pack)
+    /** A layer of a composed pack stays centred; a lone picture pans with the launcher pages. */
+    private val scroll = canvasAspect(pack) == null
     private val texture: Texture2D
     private val depthMap: Texture2D?
     private val sprites: List<Sprite>
@@ -73,9 +75,9 @@ class ImageLayer(pack: WallpaperPack, private val spec: LayerSpec, maxTextureSiz
         val fit = if (depthMap != null) {
             // Every pixel slides by its own depth; overscan for the largest possible slide.
             val margin = parallax.strength * maxOf(parallax.focus, 1f - parallax.focus)
-            coverFit(aspect, frame, margin, 0f)
+            coverFit(aspect, frame, margin, 0f, scroll)
         } else {
-            coverFit(aspect, frame, parallax.margin(spec.depth), parallax.strength * parallax.factor(spec.depth))
+            coverFit(aspect, frame, parallax.margin(spec.depth), parallax.strength * parallax.factor(spec.depth), scroll)
         }
 
         program.use()

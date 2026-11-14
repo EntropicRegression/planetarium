@@ -40,6 +40,12 @@ class ShaderLayer(pack: WallpaperPack, spec: LayerSpec, host: LayerHost, maxText
     private val uTouch = program.uniform("uTouch")
     private val uPass = program.uniform("uPass")
     private val uTilt = program.uniform("uTilt")
+    private val uOrigin = program.uniform(ShaderSource.ORIGIN)
+    /**
+     * Shape of the canvas the pack was laid out on. A feedback shader reads its own buffer by
+     * screen position, so it keeps drawing on the screen itself.
+     */
+    private val canvasAspect: Float? = if (hasSelf) null else canvasAspect(pack)
     override val usesTilt: Boolean = uTilt >= 0
     private val paramUniforms = config.params.map { program.uniform(it.id) to it.value }.filter { it.first >= 0 }
 
@@ -147,7 +153,18 @@ class ShaderLayer(pack: WallpaperPack, spec: LayerSpec, host: LayerHost, maxText
         program.use()
         val sx = width.toFloat() / frame.width
         val sy = height.toFloat() / frame.height
-        if (uResolution >= 0) GLES30.glUniform3f(uResolution, width.toFloat(), height.toFloat(), 1f)
+        // The canvas the shader draws on: the screen, or the pack's own canvas scaled to cover
+        // the screen, of which the screen then shows the middle (like the pack's pictures).
+        var canvasW = width.toFloat()
+        var canvasH = height.toFloat()
+        val aspect = canvasAspect
+        if (uOrigin >= 0 && aspect != null) {
+            if (aspect > canvasW / canvasH) canvasW = canvasH * aspect else canvasH = canvasW / aspect
+        }
+        val originX = (canvasW - width) / 2f
+        val originY = (canvasH - height) / 2f
+        if (uOrigin >= 0) GLES30.glUniform2f(uOrigin, originX, originY)
+        if (uResolution >= 0) GLES30.glUniform3f(uResolution, canvasW, canvasH, 1f)
         if (uTime >= 0) GLES30.glUniform1f(uTime, frame.timeSec)
         if (uTimeDelta >= 0) GLES30.glUniform1f(uTimeDelta, timeDelta)
         if (uFrame >= 0) GLES30.glUniform1i(uFrame, frameCount)
@@ -155,12 +172,12 @@ class ShaderLayer(pack: WallpaperPack, spec: LayerSpec, host: LayerHost, maxText
             if (everPressed) {
                 // Shadertoy: xy = last position while pressed, zw = where the press started;
                 // z > 0 while pressed, w > 0 only on the frame the press began. Origin bottom-left.
-                val startX = pressX * sx
-                val startY = (frame.height - pressY) * sy
+                val startX = pressX * sx + originX
+                val startY = (frame.height - pressY) * sy + originY
                 GLES30.glUniform4f(
                     uMouse,
-                    lastX * sx,
-                    (frame.height - lastY) * sy,
+                    lastX * sx + originX,
+                    (frame.height - lastY) * sy + originY,
                     if (pressed) startX else -startX,
                     if (clickFrame) startY else -startY,
                 )
@@ -172,7 +189,12 @@ class ShaderLayer(pack: WallpaperPack, spec: LayerSpec, host: LayerHost, maxText
         if (uTilt >= 0) GLES30.glUniform2f(uTilt, frame.input.tiltX, frame.input.tiltY)
         if (uTouch >= 0) {
             if (everPressed) {
-                GLES30.glUniform3f(uTouch, lastX / frame.width, 1f - lastY / frame.height, if (pressed) 1f else 0f)
+                GLES30.glUniform3f(
+                    uTouch,
+                    (lastX * sx + originX) / canvasW,
+                    ((frame.height - lastY) * sy + originY) / canvasH,
+                    if (pressed) 1f else 0f,
+                )
             } else {
                 GLES30.glUniform3f(uTouch, 0.5f, 0.5f, 0f)
             }

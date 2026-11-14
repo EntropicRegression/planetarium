@@ -41,7 +41,15 @@ void main() {
     )
 
     val RESERVED_NAMES: Set<String> = BUILTINS.map { it.second }.toSet() +
-        setOf("main", "mainImage", "planetariumFragColor", "vUv", "aPos")
+        setOf("main", "mainImage", "planetariumFragColor", ORIGIN, "vUv", "aPos")
+
+    /**
+     * Where the screen's bottom-left pixel sits on the canvas the shader draws on, in pixels.
+     * Zero unless the pack was laid out on a canvas of another shape than the screen; then the
+     * shader is given the whole canvas (iResolution) and the screen shows the middle of it, the
+     * same crop the pack's pictures get.
+     */
+    const val ORIGIN = "planetariumOrigin"
 
     private val COMMENTS = Regex("""//[^\n]*|/\*[\s\S]*?\*/""")
     private val VERSION_LINE = Regex("""^[ \t]*#[ \t]*version\b[^\n]*""", RegexOption.MULTILINE)
@@ -92,10 +100,11 @@ void main() {
         // A stray #version in the author's text would no longer be on the first line: blank it,
         // keeping the line so numbering is unchanged.
         out.append(VERSION_LINE.replace(source, ""))
-        out.append("\nout vec4 planetariumFragColor;\n")
+        out.append("\nuniform vec2 ").append(ORIGIN).append(";\n")
+        out.append("out vec4 planetariumFragColor;\n")
         out.append("void main() {\n")
         out.append("    vec4 color = vec4(0.0, 0.0, 0.0, 1.0);\n")
-        out.append("    mainImage(color, gl_FragCoord.xy);\n")
+        out.append("    mainImage(color, gl_FragCoord.xy + ").append(ORIGIN).append(");\n")
         out.append("    planetariumFragColor = color;\n")
         out.append("}\n")
         return out.toString()

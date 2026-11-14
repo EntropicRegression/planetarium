@@ -56,11 +56,24 @@ class Parallax(val strength: Float, val focus: Float) {
 class CoverFit(val scaleX: Float, val scaleY: Float, val offsetX: Float, val offsetY: Float)
 
 /**
- * Cover fit for content of [aspect] (width / height), panned with the launcher page scroll and
- * zoomed in by [margin] (a screen fraction) on every side so that a parallax slide of up to
- * [margin] never shows the edge. [shift] is the slide at full tilt, as a signed screen fraction.
+ * Width / height of the canvas a composed pack was laid out on (manifest key "canvas"), or null
+ * for a pack without one. Every layer of a composed pack is placed against that canvas, so on a
+ * screen of another shape they must all be cropped the same way: around the centre, and never
+ * slid sideways by the launcher, which would move the pictures but not the shaders.
  */
-fun coverFit(aspect: Float, frame: FrameContext, margin: Float, shift: Float): CoverFit {
+fun canvasAspect(pack: WallpaperPack): Float? = pack.manifest.optJSONObject("canvas")?.let {
+    val w = it.optDouble("width", 0.0)
+    val h = it.optDouble("height", 0.0)
+    if (w > 0.0 && h > 0.0) (w / h).toFloat() else null
+}
+
+/**
+ * Cover fit for content of [aspect] (width / height), zoomed in by [margin] (a screen fraction)
+ * on every side so that a parallax slide of up to [margin] never shows the edge. [shift] is the
+ * slide at full tilt, as a signed screen fraction. With [scroll] the part hidden horizontally
+ * pans with the launcher page scroll; without it the content stays centred.
+ */
+fun coverFit(aspect: Float, frame: FrameContext, margin: Float, shift: Float, scroll: Boolean = true): CoverFit {
     val viewAspect = frame.width.toFloat() / frame.height
     // Fraction of the content visible on each axis (cover fit: one axis is 1, the other < 1).
     val baseX = if (aspect > viewAspect) viewAspect / aspect else 1f
@@ -69,7 +82,7 @@ fun coverFit(aspect: Float, frame: FrameContext, margin: Float, shift: Float): C
     val scaleX = baseX * zoom
     val scaleY = baseY * zoom
     // The part hidden horizontally by the fit is spent on page scrolling.
-    val pan = (frame.input.offsetX - 0.5f) * (1f - baseX)
+    val pan = if (scroll) (frame.input.offsetX - 0.5f) * (1f - baseX) else 0f
     return CoverFit(
         scaleX, scaleY,
         pan - frame.input.tiltX * shift * scaleX,

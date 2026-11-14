@@ -68,6 +68,8 @@ class VideoLayer(pack: WallpaperPack, spec: LayerSpec, private val host: LayerHo
         val h = it.optDouble("height", 0.0)
         if (w > 0 && h > 0) (w / h).toFloat() else 0f
     } ?: 0f
+    /** A video placed on a canvas stays centred with the pack's other layers. */
+    private val scroll = canvasAspect <= 0f
 
     init {
         val radians = Math.toRadians(spec.options.optDouble("rotation", 0.0))
@@ -176,7 +178,7 @@ class VideoLayer(pack: WallpaperPack, spec: LayerSpec, private val host: LayerHo
         // page-scrolling video. With one, the video sits on that canvas like a layer in an editor.
         val canvas = if (canvasAspect > 0f) canvasAspect else aspect
         // Same cover fit, page-scroll pan and tilt parallax as an ImageLayer of the canvas' shape.
-        val fit = coverFit(canvas, frame, parallax.margin(depth), parallax.strength * parallax.factor(depth))
+        val fit = coverFit(canvas, frame, parallax.margin(depth), parallax.strength * parallax.factor(depth), scroll)
         // Size at scale 1 is the smallest that covers the canvas.
         val sizeX = if (aspect > canvas) scale * aspect / canvas else scale
         val sizeY = if (aspect > canvas) scale else scale * canvas / aspect
