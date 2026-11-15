@@ -130,6 +130,7 @@ A GLSL ES 3.00 fragment shader drawn over the whole screen.
 | `channels` | array  | none       | Up to 4 entries, bound to `iChannel0..3`. Each is an image path inside the pack, or `"self"`. See [Channels](#channels-and-feedback). |
 | `scale`    | float  | `1`        | `0.25`..`1`. Renders at this fraction of the screen resolution and upscales. Use it for heavy shaders. |
 | `blend`    | string | `"normal"` | `"normal"`: the output is premultiplied-alpha colour laid over the layers behind (alpha 1 = opaque). `"add"`: the output is added to them. |
+| `region`   | array  | none       | `[left, top, right, bottom]`, each `0`..`1` measured from the top-left of the canvas (the screen, for a pack without one). The only part the shader paints: nothing outside it is drawn, and those pixels are not processed at all. On a phone a full-screen pass costs about the same however early the shader returns, so give this to any effect that covers only part of the screen. Ignored for a feedback layer. |
 
 ## Writing shaders
 

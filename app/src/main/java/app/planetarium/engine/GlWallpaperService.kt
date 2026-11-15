@@ -7,6 +7,9 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.res.Configuration
+import android.graphics.Point
+import android.graphics.Rect
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
@@ -14,13 +17,24 @@ import android.os.PowerManager
 import android.service.wallpaper.WallpaperService
 import android.view.MotionEvent
 import android.view.SurfaceHolder
+import android.view.WindowManager
 import androidx.core.content.ContextCompat
 import app.planetarium.pack.PackStore
 import app.planetarium.pack.WallpaperPack
+import kotlin.math.roundToInt
 
 class GlWallpaperService : WallpaperService() {
 
     override fun onCreateEngine(): Engine = GlEngine()
+
+    /** The live engines; touched on the main thread only. */
+    private val engines = ArrayList<GlEngine>()
+
+    // The screen turned or changed size: a fixed-size surface must follow it.
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        engines.forEach { it.applySettings() }
+    }
 
     inner class GlEngine : Engine() {
         private val renderer = Renderer(this@GlWallpaperService)
@@ -35,6 +49,7 @@ class GlWallpaperService : WallpaperService() {
             override fun onReceive(context: Context, intent: Intent) {
                 when (intent.action) {
                     PackStore.ACTION_RELOAD -> loadActivePacks()
+                    PackStore.ACTION_SETTINGS -> applySettings()
                     PowerManager.ACTION_POWER_SAVE_MODE_CHANGED -> renderer.setPowerSave(power.isPowerSaveMode)
                     // Unlocked for sure; isKeyguardLocked can still say true while the keyguard animates away.
                     Intent.ACTION_USER_PRESENT -> setLocked(false)
@@ -45,6 +60,7 @@ class GlWallpaperService : WallpaperService() {
 
         private val mainHandler = Handler(Looper.getMainLooper())
         private var engineVisible = false
+        private var surfaceScale = 1f
         private var engineLocked = false
 
         /**
@@ -71,6 +87,7 @@ class GlWallpaperService : WallpaperService() {
             setTouchEventsEnabled(true)
             val filter = IntentFilter().apply {
                 addAction(PackStore.ACTION_RELOAD)
+                addAction(PackStore.ACTION_SETTINGS)
                 addAction(PowerManager.ACTION_POWER_SAVE_MODE_CHANGED)
                 addAction(Intent.ACTION_SCREEN_ON)
                 addAction(Intent.ACTION_SCREEN_OFF)
@@ -79,12 +96,42 @@ class GlWallpaperService : WallpaperService() {
             ContextCompat.registerReceiver(
                 this@GlWallpaperService, receiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED,
             )
+            engines += this
+            applySettings()
             renderer.setPowerSave(power.isPowerSaveMode)
             setLocked(keyguard.isKeyguardLocked)
             loadActivePacks()
         }
 
+        /** Frame-rate cap and resolution, as chosen in the app. Main thread. */
+        fun applySettings() {
+            renderer.maxFps = store.maxFps()
+            val scale = store.renderScale()
+            surfaceScale = scale
+            if (scale > 0.99f) {
+                surfaceHolder.setSizeFromLayout()
+            } else {
+                // A smaller surface, which the system stretches over the screen: every layer then
+                // has that many fewer pixels to fill.
+                val bounds = screenBounds()
+                surfaceHolder.setFixedSize(
+                    (bounds.width() * scale).roundToInt().coerceAtLeast(1),
+                    (bounds.height() * scale).roundToInt().coerceAtLeast(1),
+                )
+            }
+        }
+
+        private fun screenBounds(): Rect {
+            val windows = getSystemService(WindowManager::class.java)
+            if (Build.VERSION.SDK_INT >= 30) return windows.maximumWindowMetrics.bounds
+            val size = Point()
+            @Suppress("DEPRECATION")
+            windows.defaultDisplay.getRealSize(size)
+            return Rect(0, 0, size.x, size.y)
+        }
+
         override fun onDestroy() {
+            engines -= this
             mainHandler.removeCallbacks(unlockWatch)
             unregisterReceiver(receiver)
             renderer.release()
@@ -122,7 +169,8 @@ class GlWallpaperService : WallpaperService() {
         // The wallpaper only gets a copy of touches; it cannot consume them.
         override fun onTouchEvent(event: MotionEvent) {
             val down = event.actionMasked != MotionEvent.ACTION_UP && event.actionMasked != MotionEvent.ACTION_CANCEL
-            renderer.setTouch(event.x, event.y, down)
+            // Touches arrive in screen pixels; the layers work in pixels of the surface.
+            renderer.setTouch(event.x * surfaceScale, event.y * surfaceScale, down)
         }
 
         // API 34+: this engine was reassigned between home screen and lock screen.

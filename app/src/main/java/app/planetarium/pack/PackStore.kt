@@ -21,6 +21,7 @@ class PackStore(context: Context) {
     private val base: File = appContext.createDeviceProtectedStorageContext().filesDir
     private val packsDir = File(base, "packs").apply { mkdirs() }
     private val activeFile = File(base, "active.json")
+    private val settingsFile = File(base, "settings.json")
 
     enum class Target(val key: String) { HOME("home"), LOCK("lock") }
 
@@ -132,6 +133,39 @@ class PackStore(context: Context) {
 
     fun activePack(target: Target): WallpaperPack? = activeId(target)?.let(::load)
 
+    /** The most frames per second the wallpaper may draw for animation and tilt. */
+    fun maxFps(): Int = try {
+        JSONObject(settingsFile.readText()).optInt(KEY_MAX_FPS, DEFAULT_MAX_FPS).coerceIn(MIN_MAX_FPS, MAX_MAX_FPS)
+    } catch (e: Exception) {
+        DEFAULT_MAX_FPS
+    }
+
+    fun setMaxFps(value: Int) = saveSetting(KEY_MAX_FPS, value.coerceIn(MIN_MAX_FPS, MAX_MAX_FPS))
+
+    /**
+     * The share of the screen's resolution the wallpaper is drawn at, each way; the system
+     * scales it up to the screen. 1 is the screen's own resolution.
+     */
+    fun renderScale(): Float = try {
+        JSONObject(settingsFile.readText()).optDouble(KEY_RENDER_SCALE, 1.0).toFloat()
+            .let { if (it.isNaN()) 1f else it.coerceIn(MIN_RENDER_SCALE, 1f) }
+    } catch (e: Exception) {
+        1f
+    }
+
+    fun setRenderScale(value: Float) = saveSetting(KEY_RENDER_SCALE, value.coerceIn(MIN_RENDER_SCALE, 1f).toDouble())
+
+    private fun saveSetting(key: String, value: Any) {
+        val json = try {
+            JSONObject(settingsFile.readText())
+        } catch (e: Exception) {
+            JSONObject()
+        }
+        replaceFile(settingsFile, json.put(key, value).toString())
+        // The wallpaper service runs in another process; tell it to re-read the settings.
+        appContext.sendBroadcast(Intent(ACTION_SETTINGS).setPackage(appContext.packageName))
+    }
+
     fun setActive(id: String?, vararg targets: Target) {
         val home = if (Target.HOME in targets) id else activeId(Target.HOME)
         val lock = if (Target.LOCK in targets) id else activeId(Target.LOCK)
@@ -167,6 +201,13 @@ class PackStore(context: Context) {
     companion object {
         private const val TAG = "PackStore"
         const val ACTION_RELOAD = "app.planetarium.action.RELOAD"
+        const val ACTION_SETTINGS = "app.planetarium.action.SETTINGS"
+        const val DEFAULT_MAX_FPS = 30
+        const val MIN_MAX_FPS = 5
+        const val MAX_MAX_FPS = 120
+        const val MIN_RENDER_SCALE = 0.5f
+        private const val KEY_MAX_FPS = "maxFps"
+        private const val KEY_RENDER_SCALE = "renderScale"
         /** Same file the shader layer reads its parameter values from. */
         const val PARAMS_FILE = "params.json"
     }

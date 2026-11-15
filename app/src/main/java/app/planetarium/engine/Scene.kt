@@ -97,6 +97,8 @@ class FrameContext(
     val timeSec: Float,
     val input: InputState,
     val quad: FullscreenQuad,
+    /** Frames per second the renderer aims for while the scene is animated. */
+    val targetFps: Int = 30,
 )
 
 /** What a layer can reach outside itself. */
@@ -118,6 +120,11 @@ interface Layer {
     val animated: Boolean
     /** True if the layer reads [InputState.tiltX]/[InputState.tiltY]; the motion sensor runs only then. */
     val usesTilt: Boolean get() = false
+    /**
+     * Called for every layer before any of them draws: the place for rendering into buffers of
+     * the layer's own. Must leave the screen's framebuffer bound.
+     */
+    fun prepare(frame: FrameContext) {}
     fun draw(frame: FrameContext)
     /** Wallpaper shown/hidden. Pause decoders, sensors etc. while hidden. Called once after load too. */
     fun onVisibilityChanged(visible: Boolean) {}
@@ -131,8 +138,15 @@ class Scene private constructor(private val layers: List<Layer>) {
     val animated: Boolean = layers.any { it.animated }
     val usesTilt: Boolean = layers.any { it.usesTilt }
 
-    fun draw(width: Int, height: Int, timeSec: Float, input: InputState) {
-        val frame = FrameContext(width, height, timeSec, input, quad)
+    fun draw(width: Int, height: Int, timeSec: Float, input: InputState, targetFps: Int = 30) {
+        val frame = FrameContext(width, height, timeSec, input, quad, targetFps)
+        // Offscreen work first, then the screen in one go: see ShaderLayer.prepare.
+        layers.forEach { it.prepare(frame) }
+        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
+        GLES30.glViewport(0, 0, width, height)
+        GLES30.glDisable(GLES30.GL_SCISSOR_TEST)
+        GLES30.glClearColor(0.04f, 0.04f, 0.06f, 1f)
+        GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT)
         layers.forEach {
             // Layers may leave GL state changed; reset what the next one relies on.
             GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
@@ -159,11 +173,12 @@ class Scene private constructor(private val layers: List<Layer>) {
     companion object {
         private const val TAG = "Scene"
 
-        fun load(pack: WallpaperPack, host: LayerHost, maxTextureSize: Int): Scene {
+        /** [screenW] x [screenH] is the surface the scene will be drawn on, in pixels. */
+        fun load(pack: WallpaperPack, host: LayerHost, maxTextureSize: Int, screenW: Int, screenH: Int): Scene {
             // Far layers first. A layer that fails to load is skipped rather than failing the whole pack.
             val layers = pack.layers.sortedByDescending { it.depth }.mapNotNull { spec ->
                 try {
-                    create(pack, spec, host, maxTextureSize)
+                    create(pack, spec, host, maxTextureSize, screenW, screenH)
                 } catch (e: Exception) {
                     Log.e(TAG, "layer ${spec.src} of pack ${pack.id} failed", e)
                     null
@@ -172,9 +187,11 @@ class Scene private constructor(private val layers: List<Layer>) {
             return Scene(layers)
         }
 
-        private fun create(pack: WallpaperPack, spec: LayerSpec, host: LayerHost, maxTextureSize: Int): Layer =
+        private fun create(
+            pack: WallpaperPack, spec: LayerSpec, host: LayerHost, maxTextureSize: Int, screenW: Int, screenH: Int,
+        ): Layer =
             when (spec.type) {
-                WallpaperPack.TYPE_IMAGE -> ImageLayer(pack, spec, maxTextureSize)
+                WallpaperPack.TYPE_IMAGE -> ImageLayer(pack, spec, maxTextureSize, screenW, screenH)
                 WallpaperPack.TYPE_VIDEO -> VideoLayer(pack, spec, host)
                 WallpaperPack.TYPE_SHADER -> ShaderLayer(pack, spec, host, maxTextureSize)
                 else -> throw IllegalArgumentException("unknown layer type ${spec.type}")

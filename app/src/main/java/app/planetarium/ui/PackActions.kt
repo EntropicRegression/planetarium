@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Face
 import app.planetarium.studio.StudioActivity
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
@@ -81,6 +82,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.planetarium.engine.ShaderValidator
+import app.planetarium.engine.Benchmark
+import app.planetarium.engine.Renderer
 import app.planetarium.pack.PackStore
 import app.planetarium.pack.WallpaperPack
 import kotlinx.coroutines.Dispatchers
@@ -91,7 +94,7 @@ import java.util.Locale
 
 private const val TAG = "PackActions"
 
-private enum class Mode { Menu, Params, Rename, Editor, ConfirmDelete }
+private enum class Mode { Menu, Params, Rename, Editor, ConfirmDelete, Benchmark }
 
 /** A user-adjustable shader parameter, from the manifest's "params" array. */
 private class ParamDef(val id: String, val label: String, val min: Float, val max: Float, val default: Float)
@@ -273,6 +276,7 @@ fun PackActionsDialog(
                         onDismiss()
                     }
                 }
+                SheetAction(Icons.Filled.Info, "測量效能負擔") { mode = Mode.Benchmark }
                 SheetAction(Icons.Filled.Create, "重新命名") { mode = Mode.Rename }
                 SheetAction(Icons.Filled.Share, "匯出為 .zip") {
                     try {
@@ -328,7 +332,74 @@ fun PackActionsDialog(
         Mode.Editor -> shader?.let {
             ShaderEditor(pack, store, it, onSaved = onChanged, onDismiss = onDismiss)
         }
+
+        Mode.Benchmark -> BenchmarkDialog(pack, onDismiss)
     }
+}
+
+/** Measures the pack on this device's GPU and shows what one frame and each layer cost. */
+@Composable
+private fun BenchmarkDialog(pack: WallpaperPack, onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    var text by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(pack.id) {
+        text = withContext(Dispatchers.Default) {
+            try {
+                val bounds = context.getSystemService(android.view.WindowManager::class.java).let {
+                    if (android.os.Build.VERSION.SDK_INT >= 30) {
+                        it.maximumWindowMetrics.bounds
+                    } else {
+                        @Suppress("DEPRECATION")
+                        android.graphics.Point().also { size -> it.defaultDisplay.getRealSize(size) }
+                            .let { size -> android.graphics.Rect(0, 0, size.x, size.y) }
+                    }
+                }
+                // At the resolution the wallpaper is set to draw at, so the numbers are the wallpaper's.
+                val scale = PackStore(context).renderScale()
+                val report = Benchmark.run(
+                    context, pack,
+                    (bounds.width() * scale).toInt().coerceAtLeast(1),
+                    (bounds.height() * scale).toInt().coerceAtLeast(1),
+                )
+                Benchmark.describe(pack, report, Renderer.lastStats(context)?.takeIf { it.packId == pack.id })
+            } catch (e: Exception) {
+                Log.e(TAG, "benchmark failed", e)
+                "測量失敗:${e.message ?: e}"
+            }
+        }
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("效能負擔") },
+        text = {
+            val result = text
+            if (result == null) {
+                Column {
+                    Text("正在這支手機上測量,大約需要十秒…")
+                    LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 16.dp))
+                }
+            } else {
+                SelectionContainer {
+                    Text(
+                        result,
+                        Modifier.verticalScroll(rememberScrollState()),
+                        style = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 12.sp),
+                    )
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("關閉") } },
+        dismissButton = {
+            val result = text
+            if (result != null) {
+                TextButton(onClick = {
+                    val clipboard = context.getSystemService(android.content.ClipboardManager::class.java)
+                    clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Planetarium", result))
+                    Toast.makeText(context, "已複製", Toast.LENGTH_SHORT).show()
+                }) { Text("複製") }
+            }
+        },
+    )
 }
 
 @Composable

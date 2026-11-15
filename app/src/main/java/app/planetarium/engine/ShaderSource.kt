@@ -126,6 +126,11 @@ class ShaderConfig(pack: WallpaperPack, spec: LayerSpec) {
     /** Render scale requested by the pack, 0.25..1. */
     val scale: Float
     val additive: Boolean
+    /**
+     * The only part of the canvas the shader paints, as left, top, right, bottom in 0..1 with
+     * the origin top-left; null if it may paint anywhere. Nothing outside it is drawn at all.
+     */
+    val region: FloatArray?
     val params: List<Param>
     /** Final fragment source, ready to compile. */
     val fragment: String
@@ -148,6 +153,11 @@ class ShaderConfig(pack: WallpaperPack, spec: LayerSpec) {
         val s = options.optDouble("scale", 1.0).toFloat()
         scale = if (s.isNaN()) 1f else s.coerceIn(MIN_SCALE, 1f)
         additive = options.optString("blend", "normal") == "add"
+        region = options.optJSONArray("region")?.let { box ->
+            val v = FloatArray(4) { i -> box.optDouble(i, Double.NaN).toFloat().coerceIn(0f, 1f) }
+            // Anything that is not a box with some area is ignored rather than hiding the layer.
+            if (box.length() == 4 && v.none { it.isNaN() } && v[2] > v[0] && v[3] > v[1]) v else null
+        }
         params = readParams(pack)
 
         val file = pack.asset(spec.src)

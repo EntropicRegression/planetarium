@@ -136,11 +136,11 @@ object ShaderValidator {
     }
 
     /**
-     * A GLES 3 context current on a small pbuffer. [EglCore][app.planetarium.engine.gl.EglCore]
+     * A GLES 3 context current on a pbuffer. [EglCore][app.planetarium.engine.gl.EglCore]
      * only does window surfaces. The display is deliberately not terminated: in this process it
      * is shared with the UI toolkit's renderer.
      */
-    private class PbufferContext(width: Int, height: Int) {
+    internal class PbufferContext(width: Int, height: Int) {
         private val display: EGLDisplay = EGL14.eglGetDisplay(EGL14.EGL_DEFAULT_DISPLAY)
         private var context: EGLContext = EGL14.EGL_NO_CONTEXT
         private var surface: EGLSurface = EGL14.EGL_NO_SURFACE

@@ -9,6 +9,7 @@ import android.view.Choreographer
 import android.view.Surface
 import app.planetarium.engine.gl.EglCore
 import app.planetarium.pack.WallpaperPack
+import java.io.File
 import java.util.concurrent.CountDownLatch
 
 /**
@@ -34,9 +35,19 @@ class Renderer(context: Context) : Choreographer.FrameCallback {
     private var height = 0
     private var frameScheduled = false
     private var dirty = false
+    /** A frame was asked for that should not wait for the frame-rate cap. */
+    private var urgent = false
+    /** Longest side of the surface the loaded scenes sized their textures for. */
+    private var loadedForSize = 0
     private var lastDrawNanos = 0L
     /** Seconds of animation shown so far. Stands still while nothing is drawn. */
     private var sceneTime = 0.0
+    // What the frames of the current window of [STATS_WINDOW_NANOS] added up to, for [lastStats].
+    private var statsStartNanos = 0L
+    private var statsFrames = 0
+    private var statsDrawNanos = 0L
+    private var statsSavedNanos = 0L
+    private val statsFile = statsFile(context)
 
     private class Slot {
         var scene: Scene? = null
@@ -54,9 +65,15 @@ class Renderer(context: Context) : Choreographer.FrameCallback {
     private val playing: Boolean get() = visible && !powerSave
 
     val input = InputState()
+
+    /**
+     * Most frames per second drawn for animation, tilt and touch. A change of page (the launcher
+     * scrolling) or of what is shown is still drawn on the next refresh of the screen.
+     */
     @Volatile var maxFps = 30
 
-    private val tilt = TiltSensor(context.applicationContext, handler, input) { invalidate() }
+    // The sensor reports far more often than is worth drawing: its frames keep to the cap.
+    private val tilt = TiltSensor(context.applicationContext, handler, input) { invalidate(urgent = false) }
 
     /**
      * Sets what to show. [lock] is the scene for the lock screen when this engine serves both
@@ -117,6 +134,11 @@ class Renderer(context: Context) : Choreographer.FrameCallback {
         handler.post {
             width = w
             height = h
+            // Textures were sized for the screen they were loaded on; a clearly bigger one needs them again.
+            if (loadedForSize > 0 && maxOf(w, h) > loadedForSize * 1.1f) {
+                homeSlot.changed = homeSlot.pending != null
+                lockSlot.changed = lockSlot.pending != null
+            }
             invalidate()
         }
     }
@@ -142,7 +164,8 @@ class Renderer(context: Context) : Choreographer.FrameCallback {
         input.touchX = x
         input.touchY = y
         input.touchDown = down
-        requestRender()
+        // A finger reports far more often than is worth drawing: its frames keep to the cap.
+        handler.post { invalidate(urgent = false) }
     }
 
     /** Asks for a frame; safe from any thread. */
@@ -169,8 +192,9 @@ class Renderer(context: Context) : Choreographer.FrameCallback {
         if (playing && current.scene?.usesTilt == true) tilt.start() else tilt.stop()
     }
 
-    private fun invalidate() {
+    private fun invalidate(urgent: Boolean = true) {
         dirty = true
+        if (urgent) this.urgent = true
         schedule()
     }
 
@@ -186,8 +210,8 @@ class Renderer(context: Context) : Choreographer.FrameCallback {
         frameScheduled = false
         if (!visible || !egl.hasSurface || width == 0 || height == 0) return
         if (!dirty && !animating()) return
-        // Animated scenes are throttled; an explicit invalidate always draws on the next vsync.
-        if (!dirty && frameTimeNanos - lastDrawNanos < 1_000_000_000L / maxFps - VSYNC_SLACK_NANOS) {
+        // Animation and tilt are throttled; anything else asked for draws on the next vsync.
+        if (!urgent && frameTimeNanos - lastDrawNanos < 1_000_000_000L / maxFps.coerceAtLeast(1) - VSYNC_SLACK_NANOS) {
             schedule()
             return
         }
@@ -205,13 +229,47 @@ class Renderer(context: Context) : Choreographer.FrameCallback {
             sceneTime += ((frameTimeNanos - lastDrawNanos) / 1e9).coerceIn(0.0, MAX_FRAME_STEP_SEC)
         }
 
-        GLES30.glViewport(0, 0, width, height)
-        GLES30.glClearColor(0.04f, 0.04f, 0.06f, 1f)
-        GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT)
-        current.scene?.draw(width, height, sceneTime.toFloat(), input)
+        val started = System.nanoTime()
+        val scene = current.scene
+        if (scene != null) {
+            // Clears the screen itself, after its layers' offscreen passes.
+            scene.draw(width, height, sceneTime.toFloat(), input, maxFps)
+        } else {
+            GLES30.glViewport(0, 0, width, height)
+            GLES30.glClearColor(0.04f, 0.04f, 0.06f, 1f)
+            GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT)
+        }
         if (!egl.swap()) Log.w(TAG, "eglSwapBuffers failed")
         dirty = false
+        urgent = false
+        countFrame(frameTimeNanos, System.nanoTime() - started)
         lastDrawNanos = frameTimeNanos
+    }
+
+    /** Keeps [lastStats] up to date: how often frames are really drawn, and how long one takes. */
+    private fun countFrame(frameTimeNanos: Long, drawNanos: Long) {
+        // A pause (hidden, or a still scene waiting for input) is not part of a frame rate.
+        if (statsFrames == 0 || frameTimeNanos - lastDrawNanos > STATS_PAUSE_NANOS) {
+            statsStartNanos = frameTimeNanos
+            statsFrames = 0
+            statsDrawNanos = 0L
+        }
+        statsFrames++
+        statsDrawNanos += drawNanos
+        val elapsed = frameTimeNanos - statsStartNanos
+        if (elapsed < STATS_WINDOW_NANOS) return
+        // The first frame only opens the window: N frames span N - 1 intervals.
+        val fps = (statsFrames - 1) * 1e9f / elapsed
+        val drawMillis = statsDrawNanos / 1e6f / statsFrames
+        statsFrames = 0
+        // Often enough to be current, rarely enough not to matter.
+        if (statsSavedNanos != 0L && frameTimeNanos - statsSavedNanos < STATS_SAVE_NANOS) return
+        statsSavedNanos = frameTimeNanos
+        try {
+            statsFile.writeText("${current.pending?.id.orEmpty()}\n$fps\n$drawMillis\n")
+        } catch (e: Exception) {
+            Log.w(TAG, "could not save the frame statistics", e)
+        }
     }
 
     /** (Re)loads a slot's scene if its pack changed. Needs the GL context, so it runs from draw. */
@@ -220,11 +278,12 @@ class Renderer(context: Context) : Choreographer.FrameCallback {
         slot.changed = false
         slot.scene?.release()
         slot.scene = try {
-            slot.pending?.let { Scene.load(it, host, maxTextureSize()) }
+            slot.pending?.let { Scene.load(it, host, maxTextureSize(), width, height) }
         } catch (e: Exception) {
             Log.e(TAG, "pack load failed", e)
             null
         }
+        loadedForSize = maxOf(width, height)
         slot.scene?.onVisibilityChanged(slot === current && playing)
         updateTilt()
     }
@@ -254,9 +313,29 @@ class Renderer(context: Context) : Choreographer.FrameCallback {
         if (posted) latch.await()
     }
 
-    private companion object {
-        const val TAG = "Renderer"
-        const val VSYNC_SLACK_NANOS = 2_000_000L
-        const val MAX_FRAME_STEP_SEC = 0.1
+    /**
+     * How a wallpaper was really being drawn: frames per second, and the time the render thread
+     * spent on one (drawing plus handing it over, which waits when the GPU is behind).
+     */
+    class Stats(val packId: String, val fps: Float, val drawMillis: Float)
+
+    companion object {
+        private const val TAG = "Renderer"
+        private const val VSYNC_SLACK_NANOS = 2_000_000L
+        private const val MAX_FRAME_STEP_SEC = 0.1
+        private const val STATS_WINDOW_NANOS = 2_000_000_000L
+        private const val STATS_PAUSE_NANOS = 500_000_000L
+        private const val STATS_SAVE_NANOS = 10_000_000_000L
+
+        // A file, because the wallpaper runs in a process of its own and the app reads this.
+        private fun statsFile(context: Context) = File(context.applicationContext.cacheDir, "render-stats")
+
+        /** The latest two seconds a wallpaper engine spent drawing steadily, or null if none was saved. */
+        fun lastStats(context: Context): Stats? = try {
+            val lines = statsFile(context).readLines()
+            Stats(lines[0], lines[1].toFloat(), lines[2].toFloat())
+        } catch (e: Exception) {
+            null
+        }
     }
 }

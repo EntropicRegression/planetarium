@@ -88,6 +88,8 @@ class Texture2D(bitmap: Bitmap) {
     val id: Int
     val width = bitmap.width
     val height = bitmap.height
+    /** False for a picture without an alpha channel: it hides whatever is behind it. */
+    val hasAlpha = bitmap.hasAlpha()
 
     init {
         val ids = IntArray(1)

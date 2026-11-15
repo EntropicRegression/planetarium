@@ -1,7 +1,9 @@
 package app.planetarium.engine
 
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.opengl.GLES30
+import android.util.Log
 import app.planetarium.engine.gl.BitmapLoader
 import app.planetarium.engine.gl.ShaderProgram
 import app.planetarium.engine.gl.Texture2D
@@ -9,6 +11,7 @@ import app.planetarium.pack.LayerSpec
 import app.planetarium.pack.WallpaperPack
 import java.io.File
 import kotlin.math.PI
+import kotlin.math.ceil
 import kotlin.math.cos
 import kotlin.math.floor
 import kotlin.math.roundToInt
@@ -25,11 +28,25 @@ import kotlin.math.sin
  * frames side by side, placed at a pixel position of the image, so a mostly still picture can
  * have a few moving details without becoming a video. See docs/PACK_FORMAT.md.
  */
-class ImageLayer(pack: WallpaperPack, private val spec: LayerSpec, maxTextureSize: Int) : Layer {
+class ImageLayer(
+    pack: WallpaperPack,
+    private val spec: LayerSpec,
+    maxTextureSize: Int,
+    /** The surface the layer will be drawn on, in pixels; 0 if not known. */
+    screenW: Int = 0,
+    screenH: Int = 0,
+) : Layer {
     private val parallax = Parallax.of(pack)
     /** A layer of a composed pack stays centred; a lone picture pans with the launcher pages. */
     private val scroll = canvasAspect(pack) == null
     private val texture: Texture2D
+    /**
+     * The part of the picture that is not fully transparent, as UV fractions (left, top, right,
+     * bottom), or null if it has no transparency to speak of. Only that part is drawn: most
+     * layers of a composed pack are a small object on an otherwise empty canvas.
+     */
+    private var content: FloatArray? = null
+    private var empty = false
     private val depthMap: Texture2D?
     private val sprites: List<Sprite>
 
@@ -46,7 +63,7 @@ class ImageLayer(pack: WallpaperPack, private val spec: LayerSpec, maxTextureSiz
     private val uSpriteFrames = IntArray(MAX_SPRITES) { program.uniform("uSpriteFrame$it") }
 
     init {
-        texture = load(pack, spec.src, maxTextureSize)
+        texture = loadPicture(pack, maxTextureSize, screenW, screenH)
         depthMap = try {
             spec.options.optString("depthMap").ifEmpty { null }?.let { load(pack, it, DEPTH_MAP_SIZE) }
         } catch (e: Exception) {
@@ -71,6 +88,7 @@ class ImageLayer(pack: WallpaperPack, private val spec: LayerSpec, maxTextureSiz
         parallax.strength > 0f && (depthMap != null || parallax.factor(spec.depth) != 0f)
 
     override fun draw(frame: FrameContext) {
+        if (empty) return
         val aspect = texture.width.toFloat() / texture.height
         val fit = if (depthMap != null) {
             // Every pixel slides by its own depth; overscan for the largest possible slide.
@@ -79,6 +97,14 @@ class ImageLayer(pack: WallpaperPack, private val spec: LayerSpec, maxTextureSiz
         } else {
             coverFit(aspect, frame, parallax.margin(spec.depth), parallax.strength * parallax.factor(spec.depth), scroll)
         }
+
+        // A picture with no transparency replaces what is behind it: no need to blend.
+        val opaque = !texture.hasAlpha && sprites.isEmpty()
+        if (opaque) GLES30.glDisable(GLES30.GL_BLEND)
+        // Pixels outside the picture's content would only add nothing: do not shade them at all.
+        val bounds = content
+        val clipped = bounds != null && depthMap == null && sprites.isEmpty()
+        if (clipped && !clipTo(bounds!!, fit, frame)) return
 
         program.use()
         texture.bind(0)
@@ -112,6 +138,96 @@ class ImageLayer(pack: WallpaperPack, private val spec: LayerSpec, maxTextureSiz
         }
         GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
         frame.quad.draw()
+        if (clipped) GLES30.glDisable(GLES30.GL_SCISSOR_TEST)
+        if (opaque) GLES30.glEnable(GLES30.GL_BLEND)
+    }
+
+    /**
+     * Limits drawing to where [bounds] of the picture lands on screen under [fit]. False if that
+     * is nowhere, in which case nothing was changed and there is nothing to draw.
+     */
+    private fun clipTo(bounds: FloatArray, fit: CoverFit, frame: FrameContext): Boolean {
+        // The vertex shader's mapping, inverted: screen fraction = (uv - 0.5 - offset) / scale + 0.5.
+        val left = ((bounds[0] - 0.5f - fit.offsetX) / fit.scaleX + 0.5f) * frame.width
+        val right = ((bounds[2] - 0.5f - fit.offsetX) / fit.scaleX + 0.5f) * frame.width
+        val top = ((bounds[1] - 0.5f - fit.offsetY) / fit.scaleY + 0.5f) * frame.height
+        val bottom = ((bounds[3] - 0.5f - fit.offsetY) / fit.scaleY + 0.5f) * frame.height
+        val x0 = (floor(left).toInt() - 1).coerceIn(0, frame.width)
+        val x1 = (ceil(right).toInt() + 1).coerceIn(0, frame.width)
+        // GL counts rows from the bottom.
+        val y0 = (frame.height - ceil(bottom).toInt() - 1).coerceIn(0, frame.height)
+        val y1 = (frame.height - floor(top).toInt() + 1).coerceIn(0, frame.height)
+        if (x1 <= x0 || y1 <= y0) return false
+        GLES30.glEnable(GLES30.GL_SCISSOR_TEST)
+        GLES30.glScissor(x0, y0, x1 - x0, y1 - y0)
+        return true
+    }
+
+    /**
+     * Loads the layer's own picture. In a composed pack it is cover-fitted to the screen and never
+     * panned, so it is loaded at the size it is shown at (plus the parallax overscan) instead of
+     * at up to twice the screen: a quarter of the memory for a pack drawn at 4K.
+     */
+    private fun loadPicture(pack: WallpaperPack, maxTextureSize: Int, screenW: Int, screenH: Int): Texture2D {
+        val file = pack.asset(spec.src)
+        var limit = maxTextureSize
+        val exact = !scroll && screenW > 0 && screenH > 0 && spec.options.optJSONArray("sprites") == null
+        if (exact) {
+            val (w, h) = imageSize(file)
+            val overscan = 1f + 2f * parallax.strength * maxOf(parallax.focus, 1f - parallax.focus)
+            val shown = maxOf(screenW.toFloat() / w, screenH.toFloat() / h) * overscan
+            limit = minOf(maxTextureSize, ceil(maxOf(w, h) * shown).toInt()).coerceAtLeast(64)
+        }
+        val bitmap = BitmapLoader.load(file, limit, exact)
+        try {
+            if (bitmap.hasAlpha()) measureContent(bitmap)
+            Log.i(
+                TAG,
+                "${spec.src}: ${bitmap.width}x${bitmap.height}" +
+                    (if (empty) ", nothing in it" else content?.let { c ->
+                        ", content ${(100 * (c[2] - c[0]) * (c[3] - c[1])).toInt()}% of it"
+                    } ?: ""),
+            )
+            return Texture2D(bitmap)
+        } finally {
+            bitmap.recycle()
+        }
+    }
+
+    /** Finds the box around every pixel that is not fully transparent. */
+    private fun measureContent(bitmap: Bitmap) {
+        val w = bitmap.width
+        val h = bitmap.height
+        val row = IntArray(w)
+        var left = w
+        var right = -1
+        var top = h
+        var bottom = -1
+        for (y in 0 until h) {
+            bitmap.getPixels(row, 0, w, 0, y, w, 1)
+            var first = -1
+            var last = -1
+            for (x in 0 until w) {
+                if (row[x] ushr 24 != 0) {
+                    if (first < 0) first = x
+                    last = x
+                }
+            }
+            if (first < 0) continue
+            if (first < left) left = first
+            if (last > right) right = last
+            if (y < top) top = y
+            bottom = y
+        }
+        if (right < 0) {
+            empty = true
+            return
+        }
+        // Not worth a scissor if the content nearly fills the picture anyway.
+        if ((right - left + 1).toLong() * (bottom - top + 1) > w.toLong() * h * 9 / 10) return
+        content = floatArrayOf(
+            left.toFloat() / w, top.toFloat() / h, (right + 1).toFloat() / w, (bottom + 1).toFloat() / h,
+        )
     }
 
     override fun release() {
@@ -208,6 +324,7 @@ class ImageLayer(pack: WallpaperPack, private val spec: LayerSpec, maxTextureSiz
     }
 
     private companion object {
+        const val TAG = "ImageLayer"
         /** Depth is low-frequency; a small map is enough and keeps the lookup cheap. */
         const val DEPTH_MAP_SIZE = 1024
         const val MAX_SPRITES = 4

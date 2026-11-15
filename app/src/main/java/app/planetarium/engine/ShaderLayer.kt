@@ -11,6 +11,8 @@ import app.planetarium.engine.gl.ShaderProgram
 import app.planetarium.engine.gl.Texture2D
 import app.planetarium.pack.LayerSpec
 import app.planetarium.pack.WallpaperPack
+import kotlin.math.ceil
+import kotlin.math.floor
 import kotlin.math.roundToInt
 
 /**
@@ -18,7 +20,8 @@ import kotlin.math.roundToInt
  * authoring contract (uniforms, channels, feedback, params).
  *
  * Drawn straight to the screen unless a channel is "self" (ping-pong feedback buffers) or the
- * render scale is below 1 (one offscreen buffer, upscaled).
+ * render scale is below 1 (one offscreen buffer, upscaled). The offscreen pass happens in
+ * [prepare], ahead of the frame.
  */
 class ShaderLayer(pack: WallpaperPack, spec: LayerSpec, host: LayerHost, maxTextureSize: Int) : Layer {
     private val tag = "ShaderLayer(${spec.src})"
@@ -58,6 +61,10 @@ class ShaderLayer(pack: WallpaperPack, spec: LayerSpec, host: LayerHost, maxText
     /** Index of the target holding the newest frame. */
     private var current = 0
     private var fboBroken = false
+    /** [prepare] ran for the frame being drawn. */
+    private var prepared = false
+    /** The buffer [prepare] rendered this frame, which [draw] puts on the screen; null if none. */
+    private var presented: RenderTarget? = null
 
     private var frameCount = 0
     private var lastTimeSec = Float.NaN
@@ -98,11 +105,18 @@ class ShaderLayer(pack: WallpaperPack, spec: LayerSpec, host: LayerHost, maxText
         lastDrawNanos = 0L
     }
 
-    override fun draw(frame: FrameContext) {
-        if (animated) watchFrameRate()
+    /**
+     * The offscreen pass, if the layer has one. Done before anything is drawn to the screen:
+     * leaving the screen's framebuffer halfway through a frame makes a phone's GPU write out
+     * everything drawn so far and read it back in, which costs as much as a full-screen layer.
+     */
+    override fun prepare(frame: FrameContext) {
+        prepared = true
+        if (animated) watchFrameRate(frame.targetFps)
         updateClock(frame.timeSec)
         updatePointer(frame.input)
 
+        presented = null
         val scale = (config.scale * guardFactor).coerceIn(ShaderConfig.MIN_SCALE, 1f)
         val offscreen = (hasSelf || scale < 1f) && !fboBroken &&
             ensureTargets(
@@ -110,42 +124,86 @@ class ShaderLayer(pack: WallpaperPack, spec: LayerSpec, host: LayerHost, maxText
                 (frame.height * scale).roundToInt().coerceAtLeast(1),
                 frame.quad,
             )
+        if (!offscreen) return
 
-        if (!offscreen) {
-            GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
-            GLES30.glViewport(0, 0, frame.width, frame.height)
-            GLES30.glEnable(GLES30.GL_BLEND)
-            if (config.additive) GLES30.glBlendFunc(GLES30.GL_ONE, GLES30.GL_ONE)
-            render(frame, frame.width, frame.height, 0, 0, 0, 0)
-        } else {
-            val source = targets[current]
-            val dest = if (hasSelf) targets[1 - current] else targets[0]
-            // The buffer stores exactly what the shader wrote: no blending, no dithering.
-            GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, dest.framebuffer)
-            GLES30.glViewport(0, 0, dest.width, dest.height)
-            GLES30.glDisable(GLES30.GL_BLEND)
-            GLES30.glDisable(GLES30.GL_DITHER)
-            if (!hasSelf) {
-                GLES30.glClearColor(0f, 0f, 0f, 0f)
-                GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT)
-            }
-            render(frame, dest.width, dest.height, 0, source.texture, source.width, source.height)
-            if (hasSelf) current = 1 - current
+        val source = targets[current]
+        val dest = if (hasSelf) targets[1 - current] else targets[0]
+        // The buffer stores exactly what the shader wrote: no blending, no dithering.
+        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, dest.framebuffer)
+        GLES30.glViewport(0, 0, dest.width, dest.height)
+        GLES30.glDisable(GLES30.GL_BLEND)
+        GLES30.glDisable(GLES30.GL_DITHER)
+        GLES30.glDisable(GLES30.GL_SCISSOR_TEST)
+        if (!hasSelf) {
+            // The whole buffer, so the GPU has nothing of the previous frame to bring back.
+            GLES30.glClearColor(0f, 0f, 0f, 0f)
+            GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT)
+        }
+        clipToRegion(dest.width, dest.height)
+        render(frame, dest.width, dest.height, 0, source.texture, source.width, source.height)
+        if (hasSelf) current = 1 - current
+        presented = dest
 
-            GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
-            GLES30.glViewport(0, 0, frame.width, frame.height)
-            GLES30.glEnable(GLES30.GL_DITHER)
-            GLES30.glEnable(GLES30.GL_BLEND)
-            if (config.additive) GLES30.glBlendFunc(GLES30.GL_ONE, GLES30.GL_ONE)
-            if (hasSelf && uPass >= 0) {
-                // The shader presents its own buffer: second pass, full resolution, uPass = 1.
-                render(frame, frame.width, frame.height, 1, dest.texture, dest.width, dest.height)
-            } else {
-                blit(dest.texture, frame.quad)
-            }
+        GLES30.glDisable(GLES30.GL_SCISSOR_TEST)
+        GLES30.glEnable(GLES30.GL_DITHER)
+        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
+        GLES30.glViewport(0, 0, frame.width, frame.height)
+    }
+
+    override fun draw(frame: FrameContext) {
+        // A caller that draws layers one by one without the preparing round still gets a frame.
+        if (!prepared) prepare(frame)
+        prepared = false
+
+        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
+        GLES30.glViewport(0, 0, frame.width, frame.height)
+        GLES30.glEnable(GLES30.GL_BLEND)
+        if (config.additive) GLES30.glBlendFunc(GLES30.GL_ONE, GLES30.GL_ONE)
+        clipToRegion(frame.width, frame.height)
+        val buffer = presented
+        when {
+            buffer == null -> render(frame, frame.width, frame.height, 0, 0, 0, 0)
+            // The shader presents its own buffer: second pass, full resolution, uPass = 1.
+            hasSelf && uPass >= 0 -> render(frame, frame.width, frame.height, 1, buffer.texture, buffer.width, buffer.height)
+            else -> blit(buffer.texture, frame.quad)
         }
         if (config.additive) GLES30.glBlendFunc(GLES30.GL_ONE, GLES30.GL_ONE_MINUS_SRC_ALPHA)
+        GLES30.glDisable(GLES30.GL_SCISSOR_TEST)
         frameCount++
+    }
+
+    /** The canvas the shader draws on when its target is [width] x [height]: see [render]. */
+    private fun canvasSize(width: Int, height: Int): Pair<Float, Float> {
+        var canvasW = width.toFloat()
+        var canvasH = height.toFloat()
+        val aspect = canvasAspect
+        if (uOrigin >= 0 && aspect != null) {
+            if (aspect > canvasW / canvasH) canvasW = canvasH * aspect else canvasH = canvasW / aspect
+        }
+        return canvasW to canvasH
+    }
+
+    /**
+     * Limits drawing into a target of [width] x [height] to the layer's region, so the pixels the
+     * shader would leave empty are not processed at all: on a phone a full-screen pass costs
+     * about the same whatever the shader does. A feedback shader keeps the whole target.
+     */
+    private fun clipToRegion(width: Int, height: Int) {
+        val region = config.region
+        if (region == null || hasSelf) {
+            GLES30.glDisable(GLES30.GL_SCISSOR_TEST)
+            return
+        }
+        val (canvasW, canvasH) = canvasSize(width, height)
+        val originX = (canvasW - width) / 2f
+        val originY = (canvasH - height) / 2f
+        // One pixel more on every side, for the upscaling filter. GL counts rows from the bottom.
+        val left = (floor(region[0] * canvasW - originX).toInt() - 1).coerceIn(0, width)
+        val right = (ceil(region[2] * canvasW - originX).toInt() + 1).coerceIn(0, width)
+        val bottom = (floor((1f - region[3]) * canvasH - originY).toInt() - 1).coerceIn(0, height)
+        val top = (ceil((1f - region[1]) * canvasH - originY).toInt() + 1).coerceIn(0, height)
+        GLES30.glEnable(GLES30.GL_SCISSOR_TEST)
+        GLES30.glScissor(left, bottom, right - left, top - bottom)
     }
 
     /** One fullscreen pass of the user program into the bound framebuffer of [width] x [height]. */
@@ -155,12 +213,7 @@ class ShaderLayer(pack: WallpaperPack, spec: LayerSpec, host: LayerHost, maxText
         val sy = height.toFloat() / frame.height
         // The canvas the shader draws on: the screen, or the pack's own canvas scaled to cover
         // the screen, of which the screen then shows the middle (like the pack's pictures).
-        var canvasW = width.toFloat()
-        var canvasH = height.toFloat()
-        val aspect = canvasAspect
-        if (uOrigin >= 0 && aspect != null) {
-            if (aspect > canvasW / canvasH) canvasW = canvasH * aspect else canvasH = canvasW / aspect
-        }
+        val (canvasW, canvasH) = canvasSize(width, height)
         val originX = (canvasW - width) / 2f
         val originY = (canvasH - height) / 2f
         if (uOrigin >= 0) GLES30.glUniform2f(uOrigin, originX, originY)
@@ -305,12 +358,13 @@ class ShaderLayer(pack: WallpaperPack, spec: LayerSpec, host: LayerHost, maxText
     }
 
     /**
-     * Performance guard. The renderer draws animated scenes at 30 fps; when the GPU cannot keep
-     * up, buffer swaps back up and the gaps between draws grow. If most frames of a two-second
-     * window arrive later than [SLOW_FRAME_NANOS], the render scale drops by a quarter, down to
+     * Performance guard. The renderer draws animated scenes at a set rate; when the GPU cannot
+     * keep up, buffer swaps back up and the gaps between draws grow. If most frames of a window
+     * of [WINDOW_FRAMES] arrive [SLOW_FRAME_FACTOR] frame intervals or more after the last, the
+     * render scale drops by a quarter, down to
      * the minimum. It never goes back up, so it cannot oscillate.
      */
-    private fun watchFrameRate() {
+    private fun watchFrameRate(targetFps: Int) {
         val now = System.nanoTime()
         val gap = now - lastDrawNanos
         val first = lastDrawNanos == 0L
@@ -327,7 +381,8 @@ class ShaderLayer(pack: WallpaperPack, spec: LayerSpec, host: LayerHost, maxText
             return
         }
         samples++
-        if (gap > SLOW_FRAME_NANOS) slowSamples++
+        // Late means late for the rate the renderer is asked to keep, which the person can lower.
+        if (gap > 1_000_000_000L / targetFps.coerceIn(1, 240) * SLOW_FRAME_FACTOR) slowSamples++
         if (samples < WINDOW_FRAMES) return
         val slow = slowSamples
         samples = 0
@@ -409,8 +464,8 @@ class ShaderLayer(pack: WallpaperPack, spec: LayerSpec, host: LayerHost, maxText
     }
 
     private companion object {
-        /** Later than this (about 22 fps) counts as a missed frame at the renderer's 30 fps. */
-        const val SLOW_FRAME_NANOS = 45_000_000L
+        /** A frame this many times its interval after the last one counts as missed (45 ms at 30 fps). */
+        const val SLOW_FRAME_FACTOR = 1.35f
         /** A gap this long is a pause, not a slow frame. */
         const val PAUSE_NANOS = 1_000_000_000L
         const val WINDOW_FRAMES = 60

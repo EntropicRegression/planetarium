@@ -50,6 +50,13 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.TextButton
+import app.planetarium.engine.Renderer
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -178,6 +185,7 @@ private fun LibraryScreen() {
     var openEditor by remember { mutableStateOf(false) }
     var filter by remember { mutableStateOf<PackKind?>(null) }
     var importOpen by remember { mutableStateOf(false) }
+    var settingsOpen by remember { mutableStateOf(false) }
 
     suspend fun refresh() {
         val (list, active) = withContext(Dispatchers.IO) {
@@ -244,7 +252,17 @@ private fun LibraryScreen() {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
-        topBar = { LargeTopAppBar(title = { Text("桌布庫") }, scrollBehavior = scrollBehavior) },
+        topBar = {
+            LargeTopAppBar(
+                title = { Text("桌布庫") },
+                actions = {
+                    IconButton(onClick = { settingsOpen = true }) {
+                        Icon(Icons.Filled.Settings, contentDescription = "設定")
+                    }
+                },
+                scrollBehavior = scrollBehavior,
+            )
+        },
         floatingActionButton = {
             ExtendedFloatingActionButton(
                 onClick = { importOpen = true },
@@ -307,6 +325,7 @@ private fun LibraryScreen() {
         }
     }
 
+    if (settingsOpen) SettingsDialog(store) { settingsOpen = false }
     if (importOpen) {
         ImportSheet(
             onDismiss = { importOpen = false },
@@ -419,6 +438,80 @@ private fun CurrentTile(
         }
     }
 }
+
+/** App-wide settings: how many frames per second the wallpaper may draw, and at what resolution. */
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@Composable
+private fun SettingsDialog(store: PackStore, onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var fps by remember { mutableStateOf(store.maxFps()) }
+    var scale by remember { mutableStateOf(store.renderScale()) }
+    val live = remember { Renderer.lastStats(context) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("設定") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                Text("幀率上限", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    "動態桌布每秒最多畫幾格。調低比較省電、手機比較不燙,動畫和傾斜視差會比較不滑順;" +
+                        "靜態桌布不受影響。翻頁時仍然即時更新。",
+                    Modifier.padding(top = 4.dp, bottom = 8.dp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FPS_CHOICES.forEach { choice ->
+                        FilterChip(
+                            selected = fps == choice,
+                            onClick = {
+                                fps = choice
+                                scope.launch { withContext(Dispatchers.IO) { store.setMaxFps(choice) } }
+                            },
+                            label = { Text(if (choice == PackStore.DEFAULT_MAX_FPS) "$choice(預設)" else "$choice") },
+                        )
+                    }
+                }
+                Text("解析度", Modifier.padding(top = 16.dp), style = MaterialTheme.typography.titleSmall)
+                Text(
+                    "桌布以螢幕解析度的幾成繪製,再由系統放大。手機的負擔大致和像素數成正比:" +
+                        "75% 約省四成,50% 約省七成,畫面會比較柔,細小的文字最明顯。",
+                    Modifier.padding(top = 4.dp, bottom = 8.dp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    SCALE_CHOICES.forEach { choice ->
+                        FilterChip(
+                            selected = kotlin.math.abs(scale - choice) < 0.01f,
+                            onClick = {
+                                scale = choice
+                                scope.launch { withContext(Dispatchers.IO) { store.setRenderScale(choice) } }
+                            },
+                            label = {
+                                val percent = (choice * 100).toInt()
+                                Text(if (choice == 1f) "$percent%(預設)" else "$percent%")
+                            },
+                        )
+                    }
+                }
+                if (live != null) {
+                    Text(
+                        "桌布上次顯示時:每秒 %.0f 格".format(live.fps),
+                        Modifier.padding(top = 12.dp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("完成") } },
+    )
+}
+
+private val FPS_CHOICES = listOf(10, 15, 20, 24, 30, 60)
+private val SCALE_CHOICES = listOf(1f, 0.85f, 0.75f, 0.6f, 0.5f)
 
 @Composable
 private fun SectionTitle(text: String) {
