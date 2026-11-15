@@ -3,12 +3,7 @@
 Android 動態桌布 App。把照片、影片、分層圖片或 GLSL shader 做成桌布,傾斜手機時各層依遠近滑動,看起來有空間感。
 主畫面和鎖定畫面可以各用一張。
 
-<p>
-  <img src="docs/screenshots/1-library.png" width="24%" alt="桌布庫">
-  <img src="docs/screenshots/3-add-sheet.png" width="24%" alt="新增桌布">
-  <img src="docs/screenshots/6-night-balcony-home.png" width="24%" alt="套用在主畫面的分層桌布">
-  <img src="docs/screenshots/studio-phone.png" width="24%" alt="App 內的 AI 編輯器">
-</p>
+<img src="docs/screenshots/6-night-balcony-home.png" width="280" alt="套用在主畫面的分層空間桌布">
 
 ## 能做什麼
 
@@ -90,3 +85,7 @@ tools/      產生圖示與範例素材的腳本
 ## 第三方
 
 - 景深模型:[Depth Anything V2 Small](https://huggingface.co/onnx-community/depth-anything-v2-small)(Apache-2.0),以 ONNX Runtime 執行。
+
+## 授權
+
+[GPL-3.0](LICENSE)。你可以使用、修改和散布這份程式;散布修改後的版本時,必須以同樣的授權公開原始碼。
